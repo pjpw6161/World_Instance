@@ -1,0 +1,19 @@
+{
+  "name": "world-forge",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "web:dev": "npm --workspace web run dev",
+    "web:build": "npm --workspace web run build",
+    "web:lint": "npm --workspace web run lint",
+    "shared:build": "npm --workspace @world-forge/shared run build",
+    "shared:typecheck": "npm --workspace @world-forge/shared run typecheck",
+    "api:test": "cd apps/api && gradlew.bat test",
+    "infra:config": "docker compose -f infra/docker-compose.yml config",
+    "verify": "npm run shared:build && npm run web:build && npm run api:test && npm run infra:config"
+  }
+}

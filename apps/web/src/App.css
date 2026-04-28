@@ -1,0 +1,27 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.intro {
+  text-align: left;
+  width: min(100%, 760px);
+}
+
+.phase {
+  color: #426144;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.intro h1 {
+  color: #111816;
+  font-size: clamp(48px, 9vw, 108px);
+  line-height: 0.95;
+  margin: 0;
+}

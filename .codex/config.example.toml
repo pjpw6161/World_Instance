@@ -1,0 +1,7 @@
+# Example only. Copy to .codex/config.toml if you want repo-local Codex defaults.
+# Keep personal settings in ~/.codex/config.toml.
+
+# model = "gpt-5.1-codex-max"
+# reasoning_effort = "high"
+
+# Use your local Codex defaults unless you know you want to override them.

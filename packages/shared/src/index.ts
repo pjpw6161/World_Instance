@@ -1,0 +1,1 @@
+export const WORLD_FORGE_SHARED_VERSION = "0.0.0";

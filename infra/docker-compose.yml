@@ -1,0 +1,30 @@
+name: world-forge
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: world-forge-postgres
+    environment:
+      POSTGRES_DB: world_forge
+      POSTGRES_USER: world_forge
+      POSTGRES_PASSWORD: world_forge_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: world-forge-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+volumes:
+  postgres_data:
+  elasticsearch_data:
