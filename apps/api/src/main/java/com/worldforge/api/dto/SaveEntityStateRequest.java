@@ -39,6 +39,9 @@ public record SaveEntityStateRequest(
         @DecimalMin("0.0")
         Double jumpHeight,
 
+        @DecimalMin("0.0")
+        Double maxSlope,
+
         @NotBlank
         @Size(max = 80)
         String state,

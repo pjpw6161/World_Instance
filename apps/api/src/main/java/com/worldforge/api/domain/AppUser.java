@@ -14,16 +14,19 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "users")
-public class DevUser {
+public class AppUser {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 320)
     private String email;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 80)
     private String nickname;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -31,12 +34,13 @@ public class DevUser {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    protected DevUser() {
+    protected AppUser() {
     }
 
-    public DevUser(String email, String nickname) {
+    public AppUser(String email, String nickname, String passwordHash) {
         this.email = email;
         this.nickname = nickname;
+        this.passwordHash = passwordHash;
     }
 
     @PrePersist
@@ -61,6 +65,10 @@ public class DevUser {
 
     public String getNickname() {
         return nickname;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
     }
 
     public Instant getCreatedAt() {

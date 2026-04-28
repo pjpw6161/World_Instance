@@ -104,6 +104,10 @@ public class MapSearchProjectionService {
             }
         }
         copyIfPresent(values, livingStats, "creatureCount");
+        copyIfPresent(values, livingStats, "surfaceCreatureCount");
+        copyIfPresent(values, livingStats, "caveCreatureCount");
+        copyIfPresent(values, livingStats, "portalCount");
+        copyIfPresent(values, livingStats, "reachableAreaRatio");
         copyIfPresent(values, livingStats, "npcCount");
         return values;
     }
@@ -123,10 +127,34 @@ public class MapSearchProjectionService {
             }
         }
         copyNumeric(stats, values, "creatureCount");
+        copyNumeric(stats, values, "surfaceCreatureCount");
+        copyNumeric(stats, values, "caveCreatureCount");
+        copyNumeric(stats, values, "portalCount");
         copyNumeric(stats, values, "npcCount");
+        copyNumeric(stats, values, "reachableAreaRatio");
 
         double area = Math.max(1.0, (double) width * height);
-        double creatureCount = values.getOrDefault("creatureCount", 0.0);
+        double surfaceCreatureCount = values.getOrDefault("surfaceCreatureCount", -1.0);
+        double caveCreatureCount = values.getOrDefault("caveCreatureCount", -1.0);
+        double creatureCount = values.getOrDefault("creatureCount", -1.0);
+        if (creatureCount < 0.0 && (surfaceCreatureCount >= 0.0 || caveCreatureCount >= 0.0)) {
+            creatureCount = Math.max(0.0, surfaceCreatureCount) + Math.max(0.0, caveCreatureCount);
+            values.put("creatureCount", creatureCount);
+        } else if (creatureCount < 0.0) {
+            creatureCount = 0.0;
+            values.put("creatureCount", creatureCount);
+        }
+        if (surfaceCreatureCount < 0.0 && caveCreatureCount >= 0.0) {
+            values.put("surfaceCreatureCount", Math.max(0.0, creatureCount - caveCreatureCount));
+        } else if (surfaceCreatureCount < 0.0) {
+            values.put("surfaceCreatureCount", creatureCount);
+        }
+        if (caveCreatureCount < 0.0) {
+            values.put("caveCreatureCount", 0.0);
+        }
+        values.putIfAbsent("portalCount", 0.0);
+        values.putIfAbsent("reachableAreaRatio", doubleAt(stats, "reachableAreaRatio", 0.0));
+
         double npcCount = values.getOrDefault("npcCount", 0.0);
         values.putIfAbsent("creatureDensity", creatureCount / area);
         values.putIfAbsent("livingDensity", (creatureCount + npcCount) / area);
@@ -149,6 +177,9 @@ public class MapSearchProjectionService {
         values.put("villageDensity", density(doubleAt(stats, "villageCount", 0.0), width, height));
         values.put("creatureDensity", livingStats.getOrDefault("creatureDensity", 0.0));
         values.put("livingDensity", livingStats.getOrDefault("livingDensity", 0.0));
+        values.put("surfaceCreatureDensity", density(livingStats.getOrDefault("surfaceCreatureCount", 0.0), width, height));
+        values.put("caveCreatureDensity", density(livingStats.getOrDefault("caveCreatureCount", 0.0), width, height));
+        values.put("portalDensity", density(livingStats.getOrDefault("portalCount", 0.0), width, height));
         return values;
     }
 

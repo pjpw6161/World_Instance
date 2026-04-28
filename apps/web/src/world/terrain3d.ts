@@ -1,5 +1,5 @@
 import type { MapData, TerrainType } from "@world-forge/shared";
-import type { WorldEntity } from "./worldState";
+import { canTraverseHeightDiff, type WorldEntity } from "./worldState";
 
 export type Terrain3DViewMode = "orbit" | "top" | "side";
 
@@ -26,9 +26,24 @@ export interface TerrainPoint3D {
   z: number;
 }
 
+export interface HeightDiffMovementReadiness {
+  tileHeight: number;
+  jumpHeight: number;
+  maxSlope: number;
+  checkedDirections: number;
+  reachableDirections: number;
+  maxAdjacentHeightDiff: number;
+}
+
 const defaultMaxSamples = 96;
 const defaultTerrainWidth = 72;
 const defaultHeightScale = 12;
+const movementDirections = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+] as const;
 
 const terrainPalette: Record<TerrainType, [number, number, number]> = {
   "deep-water": [0.1, 0.24, 0.4],
@@ -111,12 +126,47 @@ export function entityToTerrainPosition(
 ): TerrainPoint3D {
   const tileX = clampInteger(entity.x, 0, mapData.width - 1);
   const tileY = clampInteger(entity.y, 0, mapData.height - 1);
-  const height = typeof entity.z === "number" ? entity.z : mapData.heightMap[tileY * mapData.width + tileX];
+  const height = mapData.heightMap[tileY * mapData.width + tileX];
 
   return {
     x: tileToWorldX(tileX, mapData.width, meshData.terrainWidth),
     y: normalizedHeight(height) * meshData.heightScale + lift,
     z: tileToWorldZ(tileY, mapData.height, meshData.terrainDepth),
+  };
+}
+
+export function heightDiffMovementReadiness(mapData: MapData, entity: WorldEntity): HeightDiffMovementReadiness {
+  const tileX = clampInteger(entity.x, 0, mapData.width - 1);
+  const tileY = clampInteger(entity.y, 0, mapData.height - 1);
+  const tileHeight = normalizedHeight(mapData.heightMap[tileY * mapData.width + tileX]);
+  const jumpHeight = Math.max(0, entity.jumpHeight);
+  const maxSlope = Math.max(0, entity.maxSlope);
+  let checkedDirections = 0;
+  let reachableDirections = 0;
+  let maxAdjacentHeightDiff = 0;
+
+  for (const [dx, dy] of movementDirections) {
+    const nextX = tileX + dx;
+    const nextY = tileY + dy;
+    if (!isInsideMap(mapData, nextX, nextY)) {
+      continue;
+    }
+    checkedDirections += 1;
+    const nextHeight = normalizedHeight(mapData.heightMap[nextY * mapData.width + nextX]);
+    const heightDiff = Math.abs(nextHeight - tileHeight);
+    maxAdjacentHeightDiff = Math.max(maxAdjacentHeightDiff, heightDiff);
+    if (canTraverseHeightDiff({ ...entity, jumpHeight, maxSlope }, heightDiff)) {
+      reachableDirections += 1;
+    }
+  }
+
+  return {
+    tileHeight,
+    jumpHeight,
+    maxSlope,
+    checkedDirections,
+    reachableDirections,
+    maxAdjacentHeightDiff,
   };
 }
 
@@ -150,6 +200,10 @@ function tileToWorldZ(tileY: number, height: number, terrainDepth: number): numb
     return 0;
   }
   return (tileY / (height - 1) - 0.5) * terrainDepth;
+}
+
+function isInsideMap(mapData: MapData, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < mapData.width && y < mapData.height;
 }
 
 function normalizedHeight(value: number | undefined): number {

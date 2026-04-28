@@ -2,18 +2,45 @@
 
 Spring Boot + Gradle service for World Forge MVP v0.1.
 
-The API stores map projects, map versions, world instances, entity-state snapshots, publish state, and search projections. It does not generate maps, run World Instance simulation ticks, or implement authentication. Map generation remains a browser WASM responsibility.
+The API stores users, map projects, map versions, world instances, entity-state snapshots, publish state, and search projections. It does not generate maps or run World Instance simulation ticks. Map generation remains a browser WASM responsibility.
 
-## Dev user strategy
+## Auth and ownership
 
-Authentication is intentionally not implemented yet. All MVP map endpoints use a local development owner created on demand:
+MVP v0.1+ uses email/password signup plus stateless JWT bearer tokens.
 
-```txt
-email: dev@worldforge.local
-nickname: Local Dev User
+```powershell
+$signup = Invoke-RestMethod -Method Post "http://localhost:8080/api/auth/signup" -ContentType "application/json" -Body (@{
+  email = "dev@example.com"
+  password = "Password123!"
+  nickname = "Dev User"
+} | ConvertTo-Json)
+
+$token = $signup.token
+$headers = @{ Authorization = "Bearer $token" }
+
+Invoke-RestMethod "http://localhost:8080/api/me" -Headers $headers
 ```
 
-This keeps ownership checks explicit while avoiding an auth dependency before the persistence flow is stable. Replace `DevUserProvider` when real authentication is introduced.
+Login returns the same response shape:
+
+```powershell
+$login = Invoke-RestMethod -Method Post "http://localhost:8080/api/auth/login" -ContentType "application/json" -Body (@{
+  email = "dev@example.com"
+  password = "Password123!"
+} | ConvertTo-Json)
+```
+
+When the `prod` or `production` Spring profile is active, `WORLD_FORGE_JWT_SECRET` must be a non-default secret of at least 32 characters. The local default is only for development.
+
+Ownership rules:
+
+- `POST /api/maps`, `GET /api/me/maps`, `PATCH /api/maps/{projectId}`, version writes, and all World Instance endpoints require a bearer token.
+- Users can manage only their own `MapProject`, `MapVersion`, and `WorldInstance` records.
+- Private maps and private map versions return 404 to anonymous users and non-owners.
+- Public map detail and public map versions are readable without authentication.
+- Public map search remains unauthenticated.
+- Public maps can be forked into the authenticated user's private map library with `POST /api/maps/{projectId}/fork`.
+- The old auto-created local dev user strategy has been removed; tests now create explicit users through signup.
 
 ## PostgreSQL
 
@@ -32,21 +59,35 @@ WORLD_FORGE_DB_URL
 WORLD_FORGE_DB_USER
 WORLD_FORGE_DB_PASSWORD
 WORLD_FORGE_JPA_DDL_AUTO
+WORLD_FORGE_FLYWAY_ENABLED
+WORLD_FORGE_JWT_SECRET
+WORLD_FORGE_JWT_ISSUER
+WORLD_FORGE_JWT_TTL_SECONDS
+WORLD_FORGE_CORS_ALLOWED_ORIGINS
 ```
 
-Recipe and stats are validated as JSON and stored as raw JSON text in the MVP entities. PostgreSQL remains the source of truth; a later migration can move these columns to `jsonb` once database migrations are introduced.
+Recipe and stats are validated as JSON and stored as raw JSON text in the MVP entities. PostgreSQL remains the source of truth; a later migration can move these columns to `jsonb`.
 
 ### Schema setup
 
-Local development uses Hibernate schema update:
+Local development and release startup use Flyway for the MVP schema:
 
 ```txt
-spring.jpa.hibernate.ddl-auto=${WORLD_FORGE_JPA_DDL_AUTO:update}
+spring.flyway.enabled=${WORLD_FORGE_FLYWAY_ENABLED:true}
+spring.jpa.hibernate.ddl-auto=${WORLD_FORGE_JPA_DDL_AUTO:validate}
 ```
 
-There is no Flyway/Liquibase migration set yet. For a clean local database, start PostgreSQL and run `.\gradlew.bat bootRun`; Hibernate creates or updates the MVP tables on startup. For release verification against an existing schema, set `WORLD_FORGE_JPA_DDL_AUTO=validate` and run the API tests or boot the service.
+For a clean local database, start PostgreSQL and run `.\gradlew.bat bootRun`; Flyway applies `src/main/resources/db/migration/V1__initial_schema.sql`, then Hibernate validates the entity mapping. Tests disable Flyway and use H2 with `ddl-auto=create-drop`.
 
 World instances store the selected `mapVersionId`, `worldTime`, and entity snapshots. The browser loads the map version recipe, regenerates `MapData` client-side, runs movement/wander locally, and saves snapshots back through `PUT /api/world-instances/{id}/state`.
+
+## CORS
+
+By default the API does not add CORS headers. For same-origin local/proxy deployments, leave `WORLD_FORGE_CORS_ALLOWED_ORIGINS` empty. For a separate frontend origin, set a comma-separated allow list:
+
+```powershell
+$env:WORLD_FORGE_CORS_ALLOWED_ORIGINS="http://localhost:5173,https://worldforge.example.com"
+```
 
 ## Elasticsearch search projection
 
@@ -69,23 +110,27 @@ WORLD_FORGE_ELASTICSEARCH_URL
 WORLD_FORGE_SEARCH_ENABLED
 WORLD_FORGE_SEARCH_INDEX_NAME
 WORLD_FORGE_ADMIN_ENABLED
+WORLD_FORGE_ADMIN_TOKEN
 ```
 
 ### Rebuild search index
 
-`POST /api/admin/search/maps/reindex` is a dev/admin maintenance endpoint. It is disabled by default because authentication is not implemented yet.
+`POST /api/admin/search/maps/reindex` is a dev/admin maintenance endpoint. It is disabled by default and also requires `X-World-Forge-Admin-Token` to match `WORLD_FORGE_ADMIN_TOKEN` when enabled.
 
 Enable it locally with:
 
 ```powershell
 $env:WORLD_FORGE_ADMIN_ENABLED="true"
+$env:WORLD_FORGE_ADMIN_TOKEN="local-admin-token"
 .\gradlew.bat bootRun
 ```
 
 Then rebuild the search projection from PostgreSQL:
 
 ```powershell
-Invoke-RestMethod -Method Post "http://localhost:8080/api/admin/search/maps/reindex"
+Invoke-RestMethod -Method Post "http://localhost:8080/api/admin/search/maps/reindex" -Headers @{
+  "X-World-Forge-Admin-Token" = "local-admin-token"
+}
 ```
 
 Reindex policy:
@@ -100,11 +145,15 @@ Reindex policy:
 
 ```txt
 GET  /api/health
+POST /api/auth/signup
+POST /api/auth/login
+GET  /api/me
 POST /api/maps
 GET  /api/maps/{projectId}
 GET  /api/me/maps
 PATCH /api/maps/{projectId}
 POST /api/maps/{projectId}/versions
+POST /api/maps/{projectId}/fork
 GET  /api/maps/{projectId}/versions
 GET  /api/map-versions/{versionId}
 POST /api/world-instances
@@ -128,6 +177,18 @@ Invoke-RestMethod "http://localhost:8080/api/search/maps/facets"
 Invoke-RestMethod "http://localhost:8080/api/search/maps/{projectId}/similar?size=5"
 ```
 
+Fork a public map before creating a World Instance:
+
+```powershell
+$forked = Invoke-RestMethod -Method Post "http://localhost:8080/api/maps/<publicProjectId>/fork" -Headers $headers
+$world = Invoke-RestMethod -Method Post "http://localhost:8080/api/world-instances" -Headers $headers -ContentType "application/json" -Body (@{
+  mapVersionId = $forked.currentVersionId
+  name = $forked.title
+  worldTime = 0
+  entities = @()
+} | ConvertTo-Json -Depth 10)
+```
+
 ## Commands
 
 From the repository root:
@@ -149,4 +210,12 @@ Focused search verification:
 
 ```powershell
 .\gradlew.bat test --tests com.worldforge.api.SearchApiIntegrationTests
+```
+
+Focused auth/ownership verification:
+
+```powershell
+.\gradlew.bat test --tests com.worldforge.api.AuthApiIntegrationTests
+.\gradlew.bat test --tests com.worldforge.api.MapApiIntegrationTests
+.\gradlew.bat test --tests com.worldforge.api.WorldInstanceApiIntegrationTests
 ```

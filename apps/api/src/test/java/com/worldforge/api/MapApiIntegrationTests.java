@@ -2,7 +2,6 @@ package com.worldforge.api;
 
 import com.worldforge.api.domain.MapProject;
 import com.worldforge.api.domain.MapVersion;
-import com.worldforge.api.repository.DevUserRepository;
 import com.worldforge.api.repository.MapProjectRepository;
 import com.worldforge.api.repository.MapVersionRepository;
 import org.junit.jupiter.api.Test;
@@ -36,9 +35,6 @@ class MapApiIntegrationTests {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private DevUserRepository devUserRepository;
-
-    @Autowired
     private MapProjectRepository mapProjectRepository;
 
     @Autowired
@@ -54,7 +50,9 @@ class MapApiIntegrationTests {
 
     @Test
     void createsLoadsAndVersionsMapProjects() throws Exception {
-        JsonNode created = postJson("/api/maps", createMapPayload("First Island", 12345, "hash-a"))
+        String token = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+
+        JsonNode created = postJson("/api/maps", createMapPayload("First Island", 12345, "hash-a"), token)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title").value("First Island"))
                 .andExpect(jsonPath("$.visibility").value("PRIVATE"))
@@ -64,16 +62,19 @@ class MapApiIntegrationTests {
         UUID projectId = UUID.fromString(created.get("id").asText());
         UUID firstVersionId = UUID.fromString(created.get("currentVersionId").asText());
 
-        mockMvc.perform(get("/api/maps/{projectId}", projectId))
+        mockMvc.perform(get("/api/maps/{projectId}", projectId)
+                        .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(projectId.toString()))
                 .andExpect(jsonPath("$.currentVersion.id").value(firstVersionId.toString()));
 
-        mockMvc.perform(get("/api/me/maps"))
+        mockMvc.perform(get("/api/me/maps")
+                        .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(projectId.toString()));
 
         mockMvc.perform(patch("/api/maps/{projectId}", projectId)
+                        .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "title", "Renamed Island",
@@ -83,7 +84,11 @@ class MapApiIntegrationTests {
                 .andExpect(jsonPath("$.title").value("Renamed Island"))
                 .andExpect(jsonPath("$.visibility").value("PUBLIC"));
 
-        JsonNode version = postJson("/api/maps/" + projectId + "/versions", createVersionPayload(54321, "hash-b"))
+        mockMvc.perform(get("/api/maps/{projectId}", projectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visibility").value("PUBLIC"));
+
+        JsonNode version = postJson("/api/maps/" + projectId + "/versions", createVersionPayload(54321, "hash-b"), token)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.projectId").value(projectId.toString()))
                 .andExpect(jsonPath("$.mapHash").value("hash-b"))
@@ -101,27 +106,118 @@ class MapApiIntegrationTests {
 
         List<MapProject> projects = mapProjectRepository.findAll();
         List<MapVersion> versions = mapVersionRepository.findAll();
-        assertThat(devUserRepository.findByEmail("dev@worldforge.local")).isPresent();
-        assertThat(projects).hasSize(1);
-        assertThat(versions).hasSize(2);
-        assertThat(projects.getFirst().getCurrentVersionId()).isEqualTo(secondVersionId);
+        assertThat(projects).anySatisfy(project -> {
+            assertThat(project.getId()).isEqualTo(projectId);
+            assertThat(project.getCurrentVersionId()).isEqualTo(secondVersionId);
+        });
+        assertThat(versions).anySatisfy(savedVersion -> assertThat(savedVersion.getId()).isEqualTo(firstVersionId));
+        assertThat(versions).anySatisfy(savedVersion -> assertThat(savedVersion.getId()).isEqualTo(secondVersionId));
     }
 
     @Test
     void rejectsInvalidRecipePayload() throws Exception {
+        String token = AuthTestSupport.bearerToken(mockMvc, objectMapper);
         Map<String, Object> payload = createMapPayload("Bad Map", 12345, "hash-bad");
         @SuppressWarnings("unchecked")
         Map<String, Object> recipe = (Map<String, Object>) payload.get("recipe");
         recipe.put("width", 1);
 
-        postJson("/api/maps", payload)
+        postJson("/api/maps", payload, token)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_RECIPE"))
                 .andExpect(jsonPath("$.details[0]").value("recipe.width must be between 64 and 512"));
     }
 
+    @Test
+    void requiresAuthenticationToCreateMaps() throws Exception {
+        postJson("/api/maps", createMapPayload("No Auth", 12345, "hash-no-auth"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void hidesPrivateMapsFromOtherUsersAndAnonymousRequests() throws Exception {
+        String ownerToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        String otherToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        JsonNode created = postJson("/api/maps", createMapPayload("Private Island", 12345, "hash-private"), ownerToken)
+                .andExpect(status().isCreated())
+                .andReturnJson();
+        UUID projectId = UUID.fromString(created.get("id").asText());
+        UUID versionId = UUID.fromString(created.get("currentVersionId").asText());
+
+        mockMvc.perform(get("/api/maps/{projectId}", projectId))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/maps/{projectId}", projectId)
+                        .header("Authorization", otherToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/map-versions/{versionId}", versionId)
+                        .header("Authorization", otherToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/maps/{projectId}", projectId)
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(projectId.toString()));
+    }
+
+    @Test
+    void forksPublicMapsIntoCurrentUsersPrivateLibrary() throws Exception {
+        String ownerToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        String otherToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        JsonNode created = postJson("/api/maps", createMapPayload("Public Source", 24680, "hash-public-source"), ownerToken)
+                .andExpect(status().isCreated())
+                .andReturnJson();
+        UUID sourceProjectId = UUID.fromString(created.get("id").asText());
+        UUID sourceVersionId = UUID.fromString(created.get("currentVersionId").asText());
+
+        mockMvc.perform(patch("/api/maps/{projectId}", sourceProjectId)
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("visibility", "PUBLIC"))))
+                .andExpect(status().isOk());
+
+        JsonNode forked = postJson("/api/maps/" + sourceProjectId + "/fork", Map.of(), otherToken)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Fork of Public Source"))
+                .andExpect(jsonPath("$.visibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.currentVersion.mapHash").value("hash-public-source"))
+                .andReturnJson();
+
+        UUID forkProjectId = UUID.fromString(forked.get("id").asText());
+        UUID forkVersionId = UUID.fromString(forked.get("currentVersionId").asText());
+        assertThat(forkProjectId).isNotEqualTo(sourceProjectId);
+        assertThat(forkVersionId).isNotEqualTo(sourceVersionId);
+
+        mockMvc.perform(get("/api/maps/{projectId}", forkProjectId)
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/maps/{projectId}", forkProjectId)
+                        .header("Authorization", otherToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentVersion.seed").value(24680));
+    }
+
+    @Test
+    void doesNotForkPrivateMapsForOtherUsers() throws Exception {
+        String ownerToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        String otherToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        JsonNode created = postJson("/api/maps", createMapPayload("Private Source", 13579, "hash-private-source"), ownerToken)
+                .andExpect(status().isCreated())
+                .andReturnJson();
+
+        postJson("/api/maps/" + created.get("id").asText() + "/fork", Map.of(), otherToken)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MAP_NOT_FOUND"));
+    }
+
     private ResultWithJson postJson(String path, Object payload) throws Exception {
         return new ResultWithJson(mockMvc.perform(post(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(payload))));
+    }
+
+    private ResultWithJson postJson(String path, Object payload, String token) throws Exception {
+        return new ResultWithJson(mockMvc.perform(post(path)
+                .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(payload))));
     }

@@ -50,15 +50,22 @@ public class RecipePayloadValidator {
             "roadLength",
             "villageCount",
             "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "portalCount",
             "npcCount",
             "generationTimeMs"
     );
     private static final Set<String> LIVING_RATIO_STATS = Set.of(
+            "reachableAreaRatio",
             "livingDensity",
             "creatureDensity"
     );
     private static final Set<String> LIVING_COUNT_STATS = Set.of(
             "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "portalCount",
             "npcCount"
     );
 

@@ -17,6 +17,7 @@ public record EntityStateResponse(
         Integer homeY,
         Double movementCostMultiplier,
         Double jumpHeight,
+        Double maxSlope,
         String state,
         String behavior,
         JsonNode metadataJson

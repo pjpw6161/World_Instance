@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as THREE from "three";
 import type { MapData } from "@world-forge/shared";
-import { createTerrainMeshData, entityToTerrainPosition, type Terrain3DViewMode, type TerrainMeshData } from "./terrain3d";
+import {
+  createTerrainMeshData,
+  entityToTerrainPosition,
+  heightDiffMovementReadiness,
+  type Terrain3DViewMode,
+  type TerrainMeshData,
+} from "./terrain3d";
 import type { WorldEntity } from "./worldState";
 
 interface WorldTerrain3DProps {
@@ -196,8 +202,31 @@ function updateEntityGroup(
     const sphere = new THREE.Mesh(geometry, material);
     const position = entityToTerrainPosition(mapData, entity, meshData, radius + 0.22);
     sphere.position.set(position.x, position.y, position.z);
+    entityGroup.add(createMovementRing(mapData, entity, meshData, position, radius));
     entityGroup.add(sphere);
   }
+}
+
+function createMovementRing(
+  mapData: MapData,
+  entity: WorldEntity,
+  meshData: TerrainMeshData,
+  position: { x: number; y: number; z: number },
+  radius: number,
+): THREE.Mesh {
+  const readiness = heightDiffMovementReadiness(mapData, entity);
+  const color = readiness.reachableDirections > 0 ? 0x54b36a : 0xb84d4d;
+  const geometry = new THREE.TorusGeometry(radius * 1.28, 0.045, 6, 28);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.82,
+  });
+  const ring = new THREE.Mesh(geometry, material);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(position.x, position.y - radius - 0.12, position.z);
+  ring.scale.z = Math.max(0.5, meshData.terrainDepth / Math.max(1, meshData.terrainWidth));
+  return ring;
 }
 
 function applyCamera(camera: THREE.PerspectiveCamera, viewMode: Terrain3DViewMode, meshData: TerrainMeshData): void {

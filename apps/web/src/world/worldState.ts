@@ -13,6 +13,7 @@ export interface WorldEntity {
   homeY?: number | null;
   movementCostMultiplier: number;
   jumpHeight: number;
+  maxSlope: number;
   state: string;
   behavior: string;
   metadataJson: Record<string, unknown>;
@@ -29,6 +30,7 @@ export interface SaveEntityStatePayload {
   homeY?: number | null;
   movementCostMultiplier: number;
   jumpHeight: number;
+  maxSlope: number;
   state: string;
   behavior: string;
   metadataJson: Record<string, unknown>;
@@ -80,6 +82,7 @@ export function fromEntityStateDto(entity: EntityStateDto): WorldEntity {
     homeY: entity.homeY,
     movementCostMultiplier: entity.movementCostMultiplier ?? defaultMovementCostMultiplier(entity.entityType),
     jumpHeight: entity.jumpHeight ?? defaultJumpHeight(entity.entityType),
+    maxSlope: entity.maxSlope ?? defaultMaxSlope(entity.entityType),
     state: entity.state,
     behavior: entity.behavior,
     metadataJson: entity.metadataJson,
@@ -99,6 +102,7 @@ export function createInitialWorldEntities(worldInstanceId: string, mapData: Map
     homeY: null,
     movementCostMultiplier: 1,
     jumpHeight: 1,
+    maxSlope: defaultMaxSlope("player"),
     state: "idle",
     behavior: "manual",
     metadataJson: {},
@@ -147,6 +151,18 @@ export function movePlayer(
   });
 }
 
+export function activatePlayerPortal(mapData: MapData, entities: readonly WorldEntity[]): WorldEntity[] {
+  return entities.map((entity) => {
+    if (entity.entityType !== "player") {
+      return entity;
+    }
+    return applyPortalTransition(mapData, {
+      ...entity,
+      state: "idle",
+    });
+  });
+}
+
 export function tickWanderingEntities(
   mapData: MapData,
   entities: readonly WorldEntity[],
@@ -183,6 +199,7 @@ export function serializeWorldEntities(entities: readonly WorldEntity[]): SaveEn
     homeY: entity.homeY ?? null,
     movementCostMultiplier: entity.movementCostMultiplier,
     jumpHeight: entity.jumpHeight,
+    maxSlope: entity.maxSlope,
     state: entity.state,
     behavior: entity.behavior,
     metadataJson: entity.metadataJson,
@@ -309,6 +326,14 @@ export function portalAt(mapData: MapData, layerId: string, x: number, y: number
   return mapData.portalList.find((portal) => portal.fromLayerId === layerId && portal.x === x && portal.y === y) ?? null;
 }
 
+export function canTraverseHeightDiff(entity: WorldEntity, heightDiff: number): boolean {
+  if (!Number.isFinite(heightDiff)) {
+    return false;
+  }
+  const normalizedDiff = Math.abs(heightDiff);
+  return normalizedDiff <= entity.jumpHeight && normalizedDiff <= entity.maxSlope;
+}
+
 function createCreature(worldInstanceId: string, entityKey: string, x: number, y: number): WorldEntity {
   return withEntityDefaults({
     worldInstanceId,
@@ -322,6 +347,7 @@ function createCreature(worldInstanceId: string, entityKey: string, x: number, y
     homeY: y,
     movementCostMultiplier: 1.4,
     jumpHeight: 0.25,
+    maxSlope: defaultMaxSlope("creature"),
     state: "idle",
     behavior: "wander",
     metadataJson: {},
@@ -334,6 +360,12 @@ function moveEntity(mapData: MapData, entity: WorldEntity, dx: number, dy: numbe
       ...entity,
       state: "idle",
     });
+  }
+  if (nextMoveAt(entity) > worldTime) {
+    return {
+      ...entity,
+      state: "waiting",
+    };
   }
   return moveEntityTo(mapData, entity, entity.x + dx, entity.y + dy, worldTime);
 }
@@ -366,7 +398,11 @@ function applyPortalTransition(mapData: MapData, entity: WorldEntity): WorldEnti
   if (!portal || !isInsideMap(mapData, portal.targetX, portal.targetY)) {
     return entity;
   }
-  if (mapData.collisionMap[portal.targetY * mapData.width + portal.targetX] === true) {
+  const targetEntity = {
+    ...entity,
+    layerId: portal.toLayerId,
+  };
+  if (!canEnterTile(mapData, targetEntity, portal.targetX, portal.targetY)) {
     return entity;
   }
   return {
@@ -390,7 +426,7 @@ function canMoveBetween(mapData: MapData, entity: WorldEntity, fromX: number, fr
   }
   const fromHeight = mapData.heightMap[fromY * mapData.width + fromX] ?? 0;
   const toHeight = mapData.heightMap[toY * mapData.width + toX] ?? 0;
-  return Math.abs(toHeight - fromHeight) <= entity.jumpHeight;
+  return canTraverseHeightDiff(entity, toHeight - fromHeight);
 }
 
 function canEnterTile(mapData: MapData, entity: WorldEntity | null, x: number, y: number): boolean {
@@ -400,10 +436,23 @@ function canEnterTile(mapData: MapData, entity: WorldEntity | null, x: number, y
   if (mapData.collisionMap[y * mapData.width + x] === true) {
     return false;
   }
+  if (hasBlockingObject(mapData, entity?.layerId ?? surfaceLayer, x, y)) {
+    return false;
+  }
   if (!entity) {
     return true;
   }
   return Number.isFinite(movementCostAt(mapData, entity, x, y));
+}
+
+function hasBlockingObject(mapData: MapData, layerId: string, x: number, y: number): boolean {
+  return mapData.objectList.some(
+    (object) => object.layerId === layerId && object.x === x && object.y === y && objectBlocksMovement(object.type),
+  );
+}
+
+function objectBlocksMovement(type: string): boolean {
+  return type === "tree" || type === "rock";
 }
 
 function withEntityDefaults(entity: WorldEntity): WorldEntity {
@@ -411,6 +460,7 @@ function withEntityDefaults(entity: WorldEntity): WorldEntity {
     ...entity,
     movementCostMultiplier: normalizePositive(entity.movementCostMultiplier, defaultMovementCostMultiplier(entity.entityType)),
     jumpHeight: normalizePositive(entity.jumpHeight, defaultJumpHeight(entity.entityType)),
+    maxSlope: normalizePositive(entity.maxSlope, defaultMaxSlope(entity.entityType)),
     metadataJson: entity.metadataJson ?? {},
   };
 }
@@ -434,6 +484,17 @@ function defaultJumpHeight(entityType: EntityType): number {
       return 0.5;
     case "creature":
       return 0.25;
+  }
+}
+
+function defaultMaxSlope(entityType: EntityType): number {
+  switch (entityType) {
+    case "player":
+      return 0.35;
+    case "npc":
+      return 0.28;
+    case "creature":
+      return 0.2;
   }
 }
 

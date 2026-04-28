@@ -28,6 +28,19 @@ public class NoopMapSearchIndexClient implements MapSearchIndexClient {
 
     @Override
     public MapSearchFacetsResponse facets() {
-        return new MapSearchFacetsResponse(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        return new MapSearchFacetsResponse(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of()
+        );
     }
 }

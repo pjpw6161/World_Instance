@@ -63,6 +63,9 @@ public class EntityState {
     @Column
     private Double jumpHeight;
 
+    @Column
+    private Double maxSlope;
+
     @Column(nullable = false)
     private String state;
 
@@ -93,6 +96,7 @@ public class EntityState {
             Integer homeY,
             Double movementCostMultiplier,
             Double jumpHeight,
+            Double maxSlope,
             String state,
             String behavior,
             String metadataJson
@@ -108,6 +112,7 @@ public class EntityState {
         this.homeY = homeY;
         this.movementCostMultiplier = movementCostMultiplier;
         this.jumpHeight = jumpHeight;
+        this.maxSlope = maxSlope;
         this.state = state;
         this.behavior = behavior;
         this.metadataJson = metadataJson;
@@ -171,6 +176,10 @@ public class EntityState {
 
     public Double getJumpHeight() {
         return jumpHeight;
+    }
+
+    public Double getMaxSlope() {
+        return maxSlope;
     }
 
     public String getState() {

@@ -24,7 +24,7 @@ public class WorldInstance {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)
-    private DevUser owner;
+    private AppUser owner;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "map_version_id", nullable = false)
@@ -45,7 +45,7 @@ public class WorldInstance {
     protected WorldInstance() {
     }
 
-    public WorldInstance(DevUser owner, MapVersion mapVersion, String name, long worldTime) {
+    public WorldInstance(AppUser owner, MapVersion mapVersion, String name, long worldTime) {
         this.owner = owner;
         this.mapVersion = mapVersion;
         this.name = name;
@@ -68,7 +68,7 @@ public class WorldInstance {
         return id;
     }
 
-    public DevUser getOwner() {
+    public AppUser getOwner() {
         return owner;
     }
 

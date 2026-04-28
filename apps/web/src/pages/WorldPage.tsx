@@ -4,12 +4,14 @@ import { createEditorEngine, type EditorEngine } from "../editor/engineAdapter";
 import { WorldCanvas } from "../world/WorldCanvas";
 import { assertGeneratedMapMatchesStoredHash } from "../world/mapIntegrity";
 import { fetchMapVersion, fetchWorldState, saveWorldState } from "../world/worldApi";
-import type { Terrain3DViewMode } from "../world/terrain3d";
+import { heightDiffMovementReadiness, type Terrain3DViewMode } from "../world/terrain3d";
 import {
+  activatePlayerPortal,
   activeLayerForEntities,
   createInitialWorldEntities,
   fromEntityStateDto,
   movePlayer,
+  portalAt,
   serializeWorldEntities,
   tickWanderingEntities,
   type WorldEntity,
@@ -86,6 +88,18 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
     }
   }, [entities, mapData, worldInstanceId, worldTime]);
 
+  const activateCurrentPortal = useCallback(() => {
+    if (!mapData || status !== "ready") {
+      return;
+    }
+    const player = entities.find((entity) => entity.entityType === "player");
+    if (!player || !portalAt(mapData, player.layerId, player.x, player.y)) {
+      return;
+    }
+    setEntities(activatePlayerPortal(mapData, entities));
+    setWorldTime((currentTime) => currentTime + 1);
+  }, [entities, mapData, status]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void loadWorld();
@@ -118,6 +132,10 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
       }
       const direction = keyToDirection(event.key);
       if (!direction) {
+        if (isPortalKey(event.key)) {
+          event.preventDefault();
+          activateCurrentPortal();
+        }
         return;
       }
       event.preventDefault();
@@ -126,11 +144,13 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mapData, status, worldTime]);
+  }, [activateCurrentPortal, mapData, status, worldTime]);
 
   const player = entities.find((entity) => entity.entityType === "player");
   const activeLayerId = activeLayerForEntities(entities);
   const lastMoveCost = player?.metadataJson.lastMoveCost;
+  const activePortal = mapData && player ? portalAt(mapData, player.layerId, player.x, player.y) : null;
+  const heightReadiness = mapData && player ? heightDiffMovementReadiness(mapData, player) : null;
 
   return (
     <main className="world-shell">
@@ -215,12 +235,31 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
             <strong>{activeLayerId}</strong>
           </div>
           <div className="world-state-row">
+            <span>Portal</span>
+            <strong>{activePortal ? `${activePortal.toLayerId} ${activePortal.targetX}, ${activePortal.targetY}` : "-"}</strong>
+          </div>
+          <button type="button" className="secondary-button world-portal-button" onClick={activateCurrentPortal} disabled={!activePortal || status !== "ready"}>
+            Use Portal
+          </button>
+          <div className="world-state-row">
             <span>Move Cost</span>
             <strong>{typeof lastMoveCost === "number" ? lastMoveCost : "-"}</strong>
           </div>
           <div className="world-state-row">
             <span>Jump</span>
             <strong>{player ? player.jumpHeight.toFixed(2) : "-"}</strong>
+          </div>
+          <div className="world-state-row">
+            <span>Max Slope</span>
+            <strong>{player ? player.maxSlope.toFixed(2) : "-"}</strong>
+          </div>
+          <div className="world-state-row">
+            <span>Height Moves</span>
+            <strong>
+              {heightReadiness
+                ? `${heightReadiness.reachableDirections}/${heightReadiness.checkedDirections} max diff ${heightReadiness.maxAdjacentHeightDiff.toFixed(2)}`
+                : "-"}
+            </strong>
           </div>
           <div className="world-state-row">
             <span>Entities</span>
@@ -257,6 +296,10 @@ function keyToDirection(key: string): { dx: number; dy: number } | null {
     default:
       return null;
   }
+}
+
+function isPortalKey(key: string): boolean {
+  return key === "Enter" || key === " " || key === "e" || key === "E";
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

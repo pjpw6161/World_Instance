@@ -32,11 +32,18 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "roadLength",
             "villageCount",
             "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "portalCount",
             "npcCount",
             "generationTimeMs"
     );
     private static final List<String> LIVING_STAT_FIELDS = List.of(
             "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "reachableAreaRatio",
+            "portalCount",
             "npcCount",
             "creatureDensity",
             "livingDensity"
@@ -55,7 +62,10 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "roadDensity",
             "villageDensity",
             "creatureDensity",
-            "livingDensity"
+            "livingDensity",
+            "surfaceCreatureDensity",
+            "caveCreatureDensity",
+            "portalDensity"
     );
 
     private final ElasticsearchSettings settings;
@@ -171,16 +181,21 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
     public MapSearchFacetsResponse facets() {
         ensureIndex();
         Map<String, Object> body = new LinkedHashMap<>();
+        Map<String, Object> aggregations = new LinkedHashMap<>();
+        aggregations.put("mapTypes", termsAgg("mapType"));
+        aggregations.put("features", termsAgg("features"));
+        aggregations.put("terrainAlgorithms", termsAgg("terrainAlgorithm"));
+        aggregations.put("caveAlgorithms", termsAgg("caveAlgorithm"));
+        aggregations.put("roadAlgorithms", termsAgg("roadAlgorithm"));
+        aggregations.put("objectPlacementAlgorithms", termsAgg("objectPlacementAlgorithm"));
+        aggregations.put("livingActivities", termsAgg("livingActivity"));
+        aggregations.put("creatureCounts", rangeAgg("livingStats.creatureCount", countRanges()));
+        aggregations.put("surfaceCreatureCounts", rangeAgg("livingStats.surfaceCreatureCount", countRanges()));
+        aggregations.put("caveCreatureCounts", rangeAgg("livingStats.caveCreatureCount", countRanges()));
+        aggregations.put("reachableAreaRatios", rangeAgg("livingStats.reachableAreaRatio", ratioRanges()));
+        aggregations.put("portalCounts", rangeAgg("livingStats.portalCount", portalCountRanges()));
         body.put("size", 0);
-        body.put("aggs", Map.of(
-                "mapTypes", termsAgg("mapType"),
-                "features", termsAgg("features"),
-                "terrainAlgorithms", termsAgg("terrainAlgorithm"),
-                "caveAlgorithms", termsAgg("caveAlgorithm"),
-                "roadAlgorithms", termsAgg("roadAlgorithm"),
-                "objectPlacementAlgorithms", termsAgg("objectPlacementAlgorithm"),
-                "livingActivities", termsAgg("livingActivity")
-        ));
+        body.put("aggs", aggregations);
 
         JsonNode root = requestJson("POST", "/" + settings.indexName() + "/_search", body);
         JsonNode aggs = root.get("aggregations");
@@ -191,7 +206,12 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 buckets(aggs, "caveAlgorithms"),
                 buckets(aggs, "roadAlgorithms"),
                 buckets(aggs, "objectPlacementAlgorithms"),
-                buckets(aggs, "livingActivities")
+                buckets(aggs, "livingActivities"),
+                buckets(aggs, "creatureCounts"),
+                buckets(aggs, "surfaceCreatureCounts"),
+                buckets(aggs, "caveCreatureCounts"),
+                buckets(aggs, "reachableAreaRatios"),
+                buckets(aggs, "portalCounts")
         );
     }
 
@@ -324,6 +344,37 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
 
     private Map<String, Object> termsAgg(String field) {
         return Map.of("terms", Map.of("field", field, "size", 20));
+    }
+
+    private Map<String, Object> rangeAgg(String field, List<Map<String, Object>> ranges) {
+        return Map.of("range", Map.of("field", field, "ranges", ranges));
+    }
+
+    private List<Map<String, Object>> countRanges() {
+        return List.of(
+                Map.of("key", "0", "to", 1),
+                Map.of("key", "1-9", "from", 1, "to", 10),
+                Map.of("key", "10-19", "from", 10, "to", 20),
+                Map.of("key", "20+", "from", 20)
+        );
+    }
+
+    private List<Map<String, Object>> portalCountRanges() {
+        return List.of(
+                Map.of("key", "0", "to", 1),
+                Map.of("key", "1-2", "from", 1, "to", 3),
+                Map.of("key", "3-5", "from", 3, "to", 6),
+                Map.of("key", "6+", "from", 6)
+        );
+    }
+
+    private List<Map<String, Object>> ratioRanges() {
+        return List.of(
+                Map.of("key", "0-0.25", "from", 0.0, "to", 0.25),
+                Map.of("key", "0.25-0.5", "from", 0.25, "to", 0.5),
+                Map.of("key", "0.5-0.75", "from", 0.5, "to", 0.75),
+                Map.of("key", "0.75-1", "from", 0.75, "to", 1.01)
+        );
     }
 
     private List<FacetBucketResponse> buckets(JsonNode aggregations, String aggregationName) {

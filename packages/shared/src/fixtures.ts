@@ -65,6 +65,7 @@ export const sampleEntityState: EntityStateDto = {
   homeY: null,
   movementCostMultiplier: 1,
   jumpHeight: 1,
+  maxSlope: 0.35,
   state: "idle",
   behavior: "manual",
   metadataJson: {},

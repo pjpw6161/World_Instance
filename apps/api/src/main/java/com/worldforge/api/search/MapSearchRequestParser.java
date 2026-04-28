@@ -43,10 +43,18 @@ public class MapSearchRequestParser {
             "roadLength",
             "villageCount",
             "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "portalCount",
             "npcCount",
             "generationTimeMs"
     );
     private static final List<String> LIVING_STAT_FIELDS = List.of(
+            "creatureCount",
+            "surfaceCreatureCount",
+            "caveCreatureCount",
+            "reachableAreaRatio",
+            "portalCount",
             "livingDensity",
             "creatureDensity"
     );
@@ -87,6 +95,12 @@ public class MapSearchRequestParser {
             "maxVillageCount",
             "minCreatureCount",
             "maxCreatureCount",
+            "minSurfaceCreatureCount",
+            "maxSurfaceCreatureCount",
+            "minCaveCreatureCount",
+            "maxCaveCreatureCount",
+            "minPortalCount",
+            "maxPortalCount",
             "minNpcCount",
             "maxNpcCount",
             "minLivingDensity",

@@ -29,6 +29,7 @@ Run the API in one terminal:
 ```powershell
 cd apps/api
 $env:WORLD_FORGE_ADMIN_ENABLED="true"
+$env:WORLD_FORGE_ADMIN_TOKEN="manual-admin-token"
 .\gradlew.bat bootRun
 ```
 
@@ -43,6 +44,19 @@ Common PowerShell variables:
 ```powershell
 $api = "http://localhost:8080"
 $web = "http://localhost:5173"
+```
+
+Create a test user and authorization header:
+
+```powershell
+$signup = Invoke-RestMethod -Method Post "$api/api/auth/signup" -ContentType "application/json" -Body (@{
+  email = "manual-tester@example.com"
+  password = "Password123!"
+  nickname = "Manual Tester"
+} | ConvertTo-Json)
+
+$headers = @{ Authorization = "Bearer $($signup.token)" }
+Invoke-RestMethod "$api/api/me" -Headers $headers
 ```
 
 ## 1. App Startup
@@ -240,7 +254,7 @@ $stats = @{
   generationTimeMs = 0
 }
 
-$map = Invoke-RestMethod -Method Post "$api/api/maps" -ContentType "application/json" -Body (@{
+$map = Invoke-RestMethod -Method Post "$api/api/maps" -Headers $headers -ContentType "application/json" -Body (@{
   title = "Manual MVP Public Candidate"
   description = "Manual checklist map"
   recipe = $recipe
@@ -259,13 +273,13 @@ Pass criteria:
 ## 12. Map Version List and Detail
 
 ```powershell
-$version = Invoke-RestMethod -Method Post "$api/api/maps/$($map.id)/versions" -ContentType "application/json" -Body (@{
+$version = Invoke-RestMethod -Method Post "$api/api/maps/$($map.id)/versions" -Headers $headers -ContentType "application/json" -Body (@{
   recipe = $recipe
   stats = $stats
   mapHash = $mapHash
 } | ConvertTo-Json -Depth 20)
 
-Invoke-RestMethod "$api/api/maps/$($map.id)/versions"
+Invoke-RestMethod "$api/api/maps/$($map.id)/versions" -Headers $headers
 Invoke-RestMethod "$api/api/map-versions/$($version.id)"
 ```
 
@@ -277,7 +291,7 @@ Pass criteria:
 ## 13. Create World Instance
 
 ```powershell
-$world = Invoke-RestMethod -Method Post "$api/api/world-instances" -ContentType "application/json" -Body (@{
+$world = Invoke-RestMethod -Method Post "$api/api/world-instances" -Headers $headers -ContentType "application/json" -Body (@{
   mapVersionId = $version.id
   name = "Manual MVP World"
   worldTime = 0
@@ -297,12 +311,18 @@ Pass criteria:
 
 Steps:
 
+- Backend auth is required for World Instance state. Store the signup/login token in the browser before opening the world:
+
+```javascript
+localStorage.setItem("worldForge.authToken", "<paste-token>")
+```
+
 - Open `http://localhost:5173/world/<worldId>`.
 - Use arrow keys or `W`, `A`, `S`, `D`.
 
 Pass criteria:
 
-- The player dot moves on the map.
+- The player dot moves on the map and the frontend sends `Authorization: Bearer <token>`.
 - The sidebar player coordinates and world time update.
 - If the page reports a `mapHash` mismatch, recreate the API map using the exact recipe and `mapHash` from `/editor`.
 
@@ -323,11 +343,18 @@ Pass criteria:
 Steps:
 
 - Try moving the player into water or another blocked tile.
+- Try moving into a visible tree/cave-wall tile when the generated map exposes one.
+- Move through road and forest tiles when available and watch the `Move Cost` value.
+- Try moving from a low tile into a much higher adjacent tile and watch `Height Moves`.
 - Watch the player coordinates.
 
 Pass criteria:
 
 - The player does not enter a tile blocked by `collisionMap`.
+- The player does not enter blocked tree or cave-wall tiles.
+- Road movement reports a lower move cost than forest movement when those costs are present in `MapData.costMap`.
+- A low height difference can be crossed, but a height difference greater than the entity `jumpHeight` or `maxSlope` is blocked or routed around.
+- The 3D marker height and movement-readiness ring agree with the same World Instance state used by 2D.
 - Movement remains client-side.
 
 ## 17. State Save and Load
@@ -335,23 +362,25 @@ Pass criteria:
 Steps:
 
 - Move the player.
+- If the player stands on a cave entrance portal, press `E`, `Enter`, `Space`, or click `Use Portal`.
 - Click `Save`.
 - Click `Reload` or refresh the page.
 - Fetch state through the API.
 
 ```powershell
-Invoke-RestMethod "$api/api/world-instances/$worldId/state"
+Invoke-RestMethod "$api/api/world-instances/$worldId/state" -Headers $headers
 ```
 
 Pass criteria:
 
-- The saved player/entity state is restored after reload.
+- The saved player/entity positions, `layerId`, and state are restored after reload.
+- A player saved inside a cave reloads on the cave layer.
 - The API response includes saved entities.
 
 ## 18. Publish Public Map
 
 ```powershell
-$published = Invoke-RestMethod -Method Patch "$api/api/maps/$($map.id)" -ContentType "application/json" -Body (@{
+$published = Invoke-RestMethod -Method Patch "$api/api/maps/$($map.id)" -Headers $headers -ContentType "application/json" -Body (@{
   visibility = "PUBLIC"
 } | ConvertTo-Json -Depth 20)
 
@@ -374,6 +403,23 @@ Pass criteria:
 
 - The public map appears in search results.
 - Only safe query parameters are used.
+
+## 19a. Fork Public Search Result
+
+Open `/search` in the browser after signing in.
+
+Steps:
+
+- Search for a public map.
+- Click `Fork & Open` on one result.
+- Confirm the app opens `/world/{worldInstanceId}`.
+- Return to `/maps`.
+
+Pass criteria:
+
+- The forked map appears in `My Maps` as `PRIVATE`.
+- The World Instance opens from the forked map version.
+- The original public map remains public and owned by the original owner.
 
 ## 20. Elasticsearch Facets
 
@@ -402,7 +448,7 @@ Pass criteria:
 Create a private map and verify it does not appear in public search.
 
 ```powershell
-$privateMap = Invoke-RestMethod -Method Post "$api/api/maps" -ContentType "application/json" -Body (@{
+$privateMap = Invoke-RestMethod -Method Post "$api/api/maps" -Headers $headers -ContentType "application/json" -Body (@{
   title = "Manual MVP Private Map"
   description = "This map must not appear in public search"
   recipe = $recipe
@@ -423,7 +469,9 @@ Pass criteria:
 Rebuild Elasticsearch from PostgreSQL public maps.
 
 ```powershell
-Invoke-RestMethod -Method Post "$api/api/admin/search/maps/reindex"
+Invoke-RestMethod -Method Post "$api/api/admin/search/maps/reindex" -Headers @{
+  "X-World-Forge-Admin-Token" = "manual-admin-token"
+}
 ```
 
 Pass criteria:
@@ -436,6 +484,7 @@ Pass criteria:
 
 ```powershell
 npm run verify
+npm run verify:release
 npm run web:lint
 cd apps/api
 .\gradlew.bat test --tests com.worldforge.api.SearchApiIntegrationTests

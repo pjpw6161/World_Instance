@@ -15,7 +15,7 @@ Users choose:
 - generation parameters: water level, mountain level, forest density, cave density, road complexity
 - view mode: 2D terrain, height map, side view, and basic 3D terrain preview
 
-The app generates a deterministic map in the browser. The API stores map projects, versions, publish state, and **World Instance** snapshots where simple entities move around the generated map.
+The app generates a deterministic map in the browser. The API stores map projects, versions, publish state, and **World Instance** snapshots where simple entities move around the generated map. Public maps can be forked into a signed-in user's private library before opening them as World Instances.
 
 ## Target architecture
 
@@ -29,7 +29,7 @@ Browser
   World Instance simulation client-side
 
 Spring Boot API
-  Auth later
+  Email/password auth + JWT bearer tokens
   Map project/version save/load
   Publish/private state
   World Instance save/load
@@ -87,7 +87,7 @@ docker compose -f infra/docker-compose.yml up -d postgres elasticsearch
 docker compose -f infra/docker-compose.yml ps
 ```
 
-Local schema setup is handled by Spring/Hibernate with `WORLD_FORGE_JPA_DDL_AUTO=update` by default. There is no migration tool yet; use `WORLD_FORGE_JPA_DDL_AUTO=validate` only after the MVP schema already exists.
+Local schema setup is handled by Flyway migrations with `WORLD_FORGE_JPA_DDL_AUTO=validate` by default. Start PostgreSQL before booting the API so Flyway can create the MVP tables.
 
 Build the TypeScript packages and the WASM wrapper:
 
@@ -109,6 +109,19 @@ Run the API:
 ```powershell
 cd apps/api
 .\gradlew.bat bootRun
+```
+
+Create a local user and token before calling protected map/world endpoints:
+
+```powershell
+$signup = Invoke-RestMethod -Method Post "http://localhost:8080/api/auth/signup" -ContentType "application/json" -Body (@{
+  email = "dev@example.com"
+  password = "Password123!"
+  nickname = "Dev User"
+} | ConvertTo-Json)
+
+$headers = @{ Authorization = "Bearer $($signup.token)" }
+Invoke-RestMethod "http://localhost:8080/api/me" -Headers $headers
 ```
 
 Run the frontend in another terminal:
@@ -140,10 +153,17 @@ Run the complete verification bundle:
 npm run verify
 ```
 
+Run release verification, including the real Emscripten WASM artifact and API build:
+
+```powershell
+npm run verify:release
+```
+
 Rebuild the search index from PostgreSQL public maps:
 
 ```powershell
 $env:WORLD_FORGE_ADMIN_ENABLED="true"
+$env:WORLD_FORGE_ADMIN_TOKEN="local-admin-token"
 cd apps/api
 .\gradlew.bat bootRun
 ```
@@ -151,7 +171,9 @@ cd apps/api
 Then call:
 
 ```powershell
-Invoke-RestMethod -Method Post http://localhost:8080/api/admin/search/maps/reindex
+Invoke-RestMethod -Method Post http://localhost:8080/api/admin/search/maps/reindex -Headers @{
+  "X-World-Forge-Admin-Token" = "local-admin-token"
+}
 ```
 
 ## Codex workflow

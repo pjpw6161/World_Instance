@@ -1,7 +1,7 @@
 package com.worldforge.api.service;
 
 import com.worldforge.api.common.ApiException;
-import com.worldforge.api.domain.DevUser;
+import com.worldforge.api.domain.AppUser;
 import com.worldforge.api.domain.EntityState;
 import com.worldforge.api.domain.EntityType;
 import com.worldforge.api.domain.MapVersion;
@@ -30,20 +30,20 @@ import java.util.UUID;
 
 @Service
 public class WorldInstanceService {
-    private final DevUserProvider devUserProvider;
+    private final CurrentUserProvider currentUserProvider;
     private final MapVersionRepository mapVersionRepository;
     private final WorldInstanceRepository worldInstanceRepository;
     private final EntityStateRepository entityStateRepository;
     private final ObjectMapper objectMapper;
 
     public WorldInstanceService(
-            DevUserProvider devUserProvider,
+            CurrentUserProvider currentUserProvider,
             MapVersionRepository mapVersionRepository,
             WorldInstanceRepository worldInstanceRepository,
             EntityStateRepository entityStateRepository,
             ObjectMapper objectMapper
     ) {
-        this.devUserProvider = devUserProvider;
+        this.currentUserProvider = currentUserProvider;
         this.mapVersionRepository = mapVersionRepository;
         this.worldInstanceRepository = worldInstanceRepository;
         this.entityStateRepository = entityStateRepository;
@@ -52,7 +52,7 @@ public class WorldInstanceService {
 
     @Transactional
     public WorldStateResponse createWorld(CreateWorldInstanceRequest request) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         MapVersion mapVersion = findOwnedMapVersion(request.mapVersionId(), owner);
         long worldTime = request.worldTime() == null ? 0L : request.worldTime();
         WorldInstance worldInstance = worldInstanceRepository.save(new WorldInstance(
@@ -67,13 +67,13 @@ public class WorldInstanceService {
 
     @Transactional(readOnly = true)
     public WorldStateResponse getWorld(UUID worldInstanceId) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         return toWorldStateResponse(findOwnedWorld(worldInstanceId, owner));
     }
 
     @Transactional(readOnly = true)
     public List<WorldInstanceResponse> listMyWorlds() {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         return worldInstanceRepository.findByOwnerIdOrderByLastSavedAtDesc(owner.getId())
                 .stream()
                 .map(this::toWorldInstanceResponse)
@@ -82,7 +82,7 @@ public class WorldInstanceService {
 
     @Transactional
     public WorldStateResponse saveWorldState(UUID worldInstanceId, SaveWorldStateRequest request) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         WorldInstance worldInstance = findOwnedWorld(worldInstanceId, owner);
         worldInstance.saveWorldTime(request.worldTime());
         entityStateRepository.deleteByWorldInstanceId(worldInstance.getId());
@@ -91,7 +91,7 @@ public class WorldInstanceService {
         return toWorldStateResponse(worldInstance);
     }
 
-    private MapVersion findOwnedMapVersion(UUID mapVersionId, DevUser owner) {
+    private MapVersion findOwnedMapVersion(UUID mapVersionId, AppUser owner) {
         MapVersion mapVersion = mapVersionRepository.findById(mapVersionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MAP_VERSION_NOT_FOUND", "Map version not found"));
         if (!mapVersion.getProject().getOwner().getId().equals(owner.getId())) {
@@ -100,7 +100,7 @@ public class WorldInstanceService {
         return mapVersion;
     }
 
-    private WorldInstance findOwnedWorld(UUID worldInstanceId, DevUser owner) {
+    private WorldInstance findOwnedWorld(UUID worldInstanceId, AppUser owner) {
         WorldInstance worldInstance = worldInstanceRepository.findById(worldInstanceId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "WORLD_INSTANCE_NOT_FOUND", "World instance not found"));
         if (!worldInstance.getOwner().getId().equals(owner.getId())) {
@@ -124,6 +124,7 @@ public class WorldInstanceService {
                         entity.homeY(),
                         entity.movementCostMultiplier(),
                         entity.jumpHeight(),
+                        entity.maxSlope(),
                         entity.state().trim(),
                         entity.behavior().trim(),
                         toJsonString(entity.metadataJson())
@@ -155,6 +156,7 @@ public class WorldInstanceService {
             }
             validateOptionalFiniteNonNegative("entities." + key + ".movementCostMultiplier", entity.movementCostMultiplier(), details);
             validateOptionalFiniteNonNegative("entities." + key + ".jumpHeight", entity.jumpHeight(), details);
+            validateOptionalFiniteNonNegative("entities." + key + ".maxSlope", entity.maxSlope(), details);
             JsonNode metadata = entity.metadataJson();
             if (metadata != null && !metadata.isObject()) {
                 details.add("entities." + key + ".metadataJson must be an object");
@@ -237,6 +239,7 @@ public class WorldInstanceService {
                 entityState.getHomeY(),
                 entityState.getMovementCostMultiplier(),
                 entityState.getJumpHeight(),
+                entityState.getMaxSlope(),
                 entityState.getState(),
                 entityState.getBehavior(),
                 toJsonNode(entityState.getMetadataJson())

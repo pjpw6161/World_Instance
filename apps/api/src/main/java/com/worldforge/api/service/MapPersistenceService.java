@@ -1,7 +1,7 @@
 package com.worldforge.api.service;
 
 import com.worldforge.api.common.ApiException;
-import com.worldforge.api.domain.DevUser;
+import com.worldforge.api.domain.AppUser;
 import com.worldforge.api.domain.MapProject;
 import com.worldforge.api.domain.MapVersion;
 import com.worldforge.api.domain.MapVisibility;
@@ -24,7 +24,7 @@ import java.util.UUID;
 
 @Service
 public class MapPersistenceService {
-    private final DevUserProvider devUserProvider;
+    private final CurrentUserProvider currentUserProvider;
     private final RecipePayloadValidator recipePayloadValidator;
     private final MapProjectRepository mapProjectRepository;
     private final MapVersionRepository mapVersionRepository;
@@ -32,14 +32,14 @@ public class MapPersistenceService {
     private final ObjectMapper objectMapper;
 
     public MapPersistenceService(
-            DevUserProvider devUserProvider,
+            CurrentUserProvider currentUserProvider,
             RecipePayloadValidator recipePayloadValidator,
             MapProjectRepository mapProjectRepository,
             MapVersionRepository mapVersionRepository,
             MapSearchProjectionService mapSearchProjectionService,
             ObjectMapper objectMapper
     ) {
-        this.devUserProvider = devUserProvider;
+        this.currentUserProvider = currentUserProvider;
         this.recipePayloadValidator = recipePayloadValidator;
         this.mapProjectRepository = mapProjectRepository;
         this.mapVersionRepository = mapVersionRepository;
@@ -49,7 +49,7 @@ public class MapPersistenceService {
 
     @Transactional
     public MapProjectResponse createMap(CreateMapRequest request) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         RecipePayload payload = recipePayloadValidator.validate(
                 request.recipe(),
                 request.stats(),
@@ -68,14 +68,13 @@ public class MapPersistenceService {
 
     @Transactional(readOnly = true)
     public MapProjectResponse getMap(UUID projectId) {
-        DevUser owner = devUserProvider.currentUser();
-        MapProject project = findOwnedProject(projectId, owner);
+        MapProject project = findVisibleProject(projectId);
         return toProjectResponse(project, currentVersion(project));
     }
 
     @Transactional(readOnly = true)
     public List<MapProjectResponse> listMyMaps() {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         return mapProjectRepository.findByOwnerIdOrderByUpdatedAtDesc(owner.getId())
                 .stream()
                 .map(project -> toProjectResponse(project, currentVersion(project)))
@@ -84,7 +83,7 @@ public class MapPersistenceService {
 
     @Transactional
     public MapProjectResponse updateMap(UUID projectId, UpdateMapProjectRequest request) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         MapProject project = findOwnedProject(projectId, owner);
         MapVisibility previousVisibility = project.getVisibility();
         String title = request.title() == null ? null : request.title().trim();
@@ -103,7 +102,7 @@ public class MapPersistenceService {
 
     @Transactional
     public MapVersionResponse createVersion(UUID projectId, CreateMapVersionRequest request) {
-        DevUser owner = devUserProvider.currentUser();
+        AppUser owner = currentUserProvider.currentUser();
         MapProject project = findOwnedProject(projectId, owner);
         RecipePayload payload = recipePayloadValidator.validate(
                 request.recipe(),
@@ -119,10 +118,38 @@ public class MapPersistenceService {
         return toVersionResponse(version);
     }
 
+    @Transactional
+    public MapProjectResponse forkMap(UUID projectId) {
+        AppUser owner = currentUserProvider.currentUser();
+        MapProject sourceProject = findVisibleProject(projectId);
+        MapVersion sourceVersion = currentVersion(sourceProject);
+        if (sourceVersion == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "MAP_VERSION_NOT_FOUND", "Map project has no current version");
+        }
+
+        MapProject fork = mapProjectRepository.save(new MapProject(
+                owner,
+                forkTitle(sourceProject.getTitle()),
+                sourceProject.getDescription()
+        ));
+        MapVersion forkVersion = mapVersionRepository.save(new MapVersion(
+                fork,
+                sourceVersion.getEngineVersion(),
+                sourceVersion.getSeed(),
+                sourceVersion.getWidth(),
+                sourceVersion.getHeight(),
+                sourceVersion.getRecipeJson(),
+                sourceVersion.getStatsJson(),
+                sourceVersion.getMapHash(),
+                sourceVersion.getThumbnailUrl()
+        ));
+        fork.setCurrentVersionId(forkVersion.getId());
+        return toProjectResponse(fork, forkVersion);
+    }
+
     @Transactional(readOnly = true)
     public List<MapVersionResponse> listVersions(UUID projectId) {
-        DevUser owner = devUserProvider.currentUser();
-        MapProject project = findOwnedProject(projectId, owner);
+        MapProject project = findVisibleProject(projectId);
         return mapVersionRepository.findByProjectIdOrderByCreatedAtDesc(project.getId())
                 .stream()
                 .map(this::toVersionResponse)
@@ -131,22 +158,39 @@ public class MapPersistenceService {
 
     @Transactional(readOnly = true)
     public MapVersionResponse getVersion(UUID versionId) {
-        DevUser owner = devUserProvider.currentUser();
         MapVersion version = mapVersionRepository.findById(versionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MAP_VERSION_NOT_FOUND", "Map version not found"));
-        if (!version.getProject().getOwner().getId().equals(owner.getId())) {
+        if (!canReadProject(version.getProject())) {
             throw new ApiException(HttpStatus.NOT_FOUND, "MAP_VERSION_NOT_FOUND", "Map version not found");
         }
         return toVersionResponse(version);
     }
 
-    private MapProject findOwnedProject(UUID projectId, DevUser owner) {
+    private MapProject findOwnedProject(UUID projectId, AppUser owner) {
         MapProject project = mapProjectRepository.findById(projectId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MAP_NOT_FOUND", "Map project not found"));
         if (!project.getOwner().getId().equals(owner.getId())) {
             throw new ApiException(HttpStatus.NOT_FOUND, "MAP_NOT_FOUND", "Map project not found");
         }
         return project;
+    }
+
+    private MapProject findVisibleProject(UUID projectId) {
+        MapProject project = mapProjectRepository.findById(projectId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MAP_NOT_FOUND", "Map project not found"));
+        if (!canReadProject(project)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "MAP_NOT_FOUND", "Map project not found");
+        }
+        return project;
+    }
+
+    private boolean canReadProject(MapProject project) {
+        if (project.getVisibility() == MapVisibility.PUBLIC) {
+            return true;
+        }
+        return currentUserProvider.currentUserId()
+                .map(userId -> project.getOwner().getId().equals(userId))
+                .orElse(false);
     }
 
     private MapVersion saveVersion(MapProject project, RecipePayload payload) {
@@ -169,6 +213,15 @@ public class MapPersistenceService {
             return null;
         }
         return mapVersionRepository.findById(currentVersionId).orElse(null);
+    }
+
+    private String forkTitle(String title) {
+        String prefix = "Fork of ";
+        String value = prefix + title;
+        if (value.length() <= 160) {
+            return value;
+        }
+        return value.substring(0, 160);
     }
 
     private MapProjectResponse toProjectResponse(MapProject project, MapVersion currentVersion) {

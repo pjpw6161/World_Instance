@@ -9,6 +9,11 @@ public record MapSearchFacetsResponse(
         List<FacetBucketResponse> caveAlgorithms,
         List<FacetBucketResponse> roadAlgorithms,
         List<FacetBucketResponse> objectPlacementAlgorithms,
-        List<FacetBucketResponse> livingActivities
+        List<FacetBucketResponse> livingActivities,
+        List<FacetBucketResponse> creatureCounts,
+        List<FacetBucketResponse> surfaceCreatureCounts,
+        List<FacetBucketResponse> caveCreatureCounts,
+        List<FacetBucketResponse> reachableAreaRatios,
+        List<FacetBucketResponse> portalCounts
 ) {
 }

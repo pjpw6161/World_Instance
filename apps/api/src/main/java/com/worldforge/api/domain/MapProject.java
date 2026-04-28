@@ -26,7 +26,7 @@ public class MapProject {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)
-    private DevUser owner;
+    private AppUser owner;
 
     @Column(nullable = false)
     private String title;
@@ -50,7 +50,7 @@ public class MapProject {
     protected MapProject() {
     }
 
-    public MapProject(DevUser owner, String title, String description) {
+    public MapProject(AppUser owner, String title, String description) {
         this.owner = owner;
         this.title = title;
         this.description = description;
@@ -72,7 +72,7 @@ public class MapProject {
         return id;
     }
 
-    public DevUser getOwner() {
+    public AppUser getOwner() {
         return owner;
     }
 

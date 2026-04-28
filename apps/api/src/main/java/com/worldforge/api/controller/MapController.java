@@ -62,6 +62,12 @@ public class MapController {
         return mapPersistenceService.createVersion(projectId, request);
     }
 
+    @PostMapping("/maps/{projectId}/fork")
+    @ResponseStatus(HttpStatus.CREATED)
+    MapProjectResponse forkMap(@PathVariable UUID projectId) {
+        return mapPersistenceService.forkMap(projectId);
+    }
+
     @GetMapping("/maps/{projectId}/versions")
     List<MapVersionResponse> listVersions(@PathVariable UUID projectId) {
         return mapPersistenceService.listVersions(projectId);

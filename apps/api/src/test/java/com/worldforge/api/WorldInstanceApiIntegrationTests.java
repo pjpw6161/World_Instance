@@ -42,25 +42,28 @@ class WorldInstanceApiIntegrationTests {
 
     @Test
     void createsLoadsAndSavesWorldState() throws Exception {
-        UUID mapVersionId = createMapVersion("world-map-a", 12345);
+        String token = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        UUID mapVersionId = createMapVersion("world-map-a", 12345, token);
 
         JsonNode created = postJson("/api/world-instances", Map.of(
                         "mapVersionId", mapVersionId.toString(),
                         "name", "Playable Island",
                         "worldTime", 7,
                         "entities", List.of(entity("player", "player", 1, 1))
-                ))
+                ), token)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.worldInstance.name").value("Playable Island"))
                 .andExpect(jsonPath("$.worldInstance.worldTime").value(7))
                 .andExpect(jsonPath("$.entities[0].entityKey").value("player"))
                 .andExpect(jsonPath("$.entities[0].movementCostMultiplier").value(1.0))
                 .andExpect(jsonPath("$.entities[0].jumpHeight").value(1.0))
+                .andExpect(jsonPath("$.entities[0].maxSlope").value(0.35))
                 .andReturnJson();
 
         UUID worldInstanceId = UUID.fromString(created.get("worldInstance").get("id").asText());
 
-        mockMvc.perform(get("/api/world-instances/{worldInstanceId}/state", worldInstanceId))
+        mockMvc.perform(get("/api/world-instances/{worldInstanceId}/state", worldInstanceId)
+                        .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.worldInstance.mapVersionId").value(mapVersionId.toString()))
                 .andExpect(jsonPath("$.entities[0].x").value(1));
@@ -71,14 +74,14 @@ class WorldInstanceApiIntegrationTests {
                                 entity("player", "player", 2, 1),
                                 entity("creature-1", "creature", 3, 1)
                         )
-                ))
+                ), token)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.worldInstance.worldTime").value(12))
                 .andReturnJson();
 
         assertThat(saved.get("entities").size()).isEqualTo(2);
 
-        JsonNode worlds = getJson("/api/me/world-instances")
+        JsonNode worlds = getJson("/api/me/world-instances", token)
                 .andExpect(status().isOk())
                 .andReturnJson();
         boolean listed = false;
@@ -95,13 +98,14 @@ class WorldInstanceApiIntegrationTests {
 
     @Test
     void rejectsEntityStateOutsideMapBounds() throws Exception {
-        UUID mapVersionId = createMapVersion("world-map-b", 54321);
+        String token = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        UUID mapVersionId = createMapVersion("world-map-b", 54321, token);
         JsonNode created = postJson("/api/world-instances", Map.of(
                         "mapVersionId", mapVersionId.toString(),
                         "name", "Bounds Test",
                         "worldTime", 0,
                         "entities", List.of()
-                ))
+                ), token)
                 .andExpect(status().isCreated())
                 .andReturnJson();
 
@@ -110,33 +114,67 @@ class WorldInstanceApiIntegrationTests {
         putJson("/api/world-instances/" + worldInstanceId + "/state", Map.of(
                         "worldTime", 1,
                         "entities", List.of(entity("player", "player", 999, 1))
-                ))
+                ), token)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_WORLD_STATE"))
                 .andExpect(jsonPath("$.details[0]").value("entities.player.x must be between 0 and 255"));
     }
 
-    private UUID createMapVersion(String title, long seed) throws Exception {
-        JsonNode created = postJson("/api/maps", createMapPayload(title, seed, title + "-hash"))
+    @Test
+    void enforcesWorldInstanceOwnership() throws Exception {
+        String ownerToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        String otherToken = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        UUID mapVersionId = createMapVersion("world-owned-map", 12345, ownerToken);
+
+        JsonNode created = postJson("/api/world-instances", Map.of(
+                        "mapVersionId", mapVersionId.toString(),
+                        "name", "Owned World",
+                        "worldTime", 0,
+                        "entities", List.of()
+                ), ownerToken)
+                .andExpect(status().isCreated())
+                .andReturnJson();
+        UUID worldInstanceId = UUID.fromString(created.get("worldInstance").get("id").asText());
+
+        mockMvc.perform(get("/api/world-instances/{worldInstanceId}/state", worldInstanceId)
+                        .header("Authorization", otherToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WORLD_INSTANCE_NOT_FOUND"));
+
+        postJson("/api/world-instances", Map.of(
+                        "mapVersionId", mapVersionId.toString(),
+                        "name", "Other User World",
+                        "worldTime", 0,
+                        "entities", List.of()
+                ), otherToken)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MAP_VERSION_NOT_FOUND"));
+    }
+
+    private UUID createMapVersion(String title, long seed, String token) throws Exception {
+        JsonNode created = postJson("/api/maps", createMapPayload(title, seed, title + "-hash"), token)
                 .andExpect(status().isCreated())
                 .andReturnJson();
         return UUID.fromString(created.get("currentVersionId").asText());
     }
 
-    private ResultWithJson postJson(String path, Object payload) throws Exception {
+    private ResultWithJson postJson(String path, Object payload, String token) throws Exception {
         return new ResultWithJson(mockMvc.perform(post(path)
+                .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(payload))));
     }
 
-    private ResultWithJson putJson(String path, Object payload) throws Exception {
+    private ResultWithJson putJson(String path, Object payload, String token) throws Exception {
         return new ResultWithJson(mockMvc.perform(put(path)
+                .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(payload))));
     }
 
-    private ResultWithJson getJson(String path) throws Exception {
-        return new ResultWithJson(mockMvc.perform(get(path)));
+    private ResultWithJson getJson(String path, String token) throws Exception {
+        return new ResultWithJson(mockMvc.perform(get(path)
+                .header("Authorization", token)));
     }
 
     private Map<String, Object> createMapPayload(String title, long seed, String mapHash) {
@@ -207,6 +245,7 @@ class WorldInstanceApiIntegrationTests {
         entity.put("homeY", null);
         entity.put("movementCostMultiplier", type.equals("player") ? 1.0 : 1.4);
         entity.put("jumpHeight", type.equals("player") ? 1.0 : 0.25);
+        entity.put("maxSlope", type.equals("player") ? 0.35 : 0.2);
         entity.put("state", "idle");
         entity.put("behavior", type.equals("player") ? "manual" : "wander");
         entity.put("metadataJson", Map.of());
