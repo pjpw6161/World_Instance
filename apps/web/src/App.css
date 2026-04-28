@@ -373,3 +373,165 @@ input:focus-visible {
     min-height: 280px;
   }
 }
+
+.world-shell {
+  min-height: 100vh;
+  background: #f5f7f3;
+  color: #1e2723;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.world-header {
+  min-height: 72px;
+  border-bottom: 1px solid #d7ded6;
+  background: #fbfcfa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+}
+
+.world-header p {
+  color: #587064;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  text-transform: uppercase;
+}
+
+.world-header h1 {
+  font-size: 24px;
+  line-height: 1;
+  margin: 0;
+}
+
+.world-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.world-actions .generate-button {
+  min-height: 36px;
+  padding: 0 16px;
+  width: auto;
+}
+
+.text-link {
+  color: #1b4d70;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.world-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  min-height: 0;
+}
+
+.world-stage {
+  min-width: 0;
+  padding: 18px;
+}
+
+.world-frame {
+  min-height: calc(100vh - 110px);
+}
+
+.world-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.world-sidebar {
+  background: #fbfcfa;
+  border-left: 1px solid #d9e0d8;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.world-state-row {
+  min-height: 48px;
+  border: 1px solid #d8e2d7;
+  border-radius: 6px;
+  background: #eef3ed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.world-state-row span {
+  color: #587064;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.world-state-row strong {
+  color: #1f2b27;
+  font-size: 15px;
+}
+
+.world-hash {
+  border-top: 1px solid #d9e0d8;
+  margin-top: 6px;
+  padding-top: 14px;
+}
+
+.world-hash code {
+  color: #1f2b27;
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 860px) {
+  .world-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .world-sidebar {
+    border-left: 0;
+    border-top: 1px solid #d9e0d8;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .world-hash {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .world-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .world-actions {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+  }
+
+  .world-stage,
+  .world-sidebar {
+    padding: 14px;
+  }
+
+  .world-frame {
+    min-height: 360px;
+  }
+
+  .world-sidebar {
+    grid-template-columns: 1fr;
+  }
+}

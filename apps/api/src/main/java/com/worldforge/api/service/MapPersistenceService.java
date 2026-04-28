@@ -11,6 +11,7 @@ import com.worldforge.api.dto.MapVersionResponse;
 import com.worldforge.api.dto.UpdateMapProjectRequest;
 import com.worldforge.api.repository.MapProjectRepository;
 import com.worldforge.api.repository.MapVersionRepository;
+import com.worldforge.api.search.MapSearchProjectionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ public class MapPersistenceService {
     private final RecipePayloadValidator recipePayloadValidator;
     private final MapProjectRepository mapProjectRepository;
     private final MapVersionRepository mapVersionRepository;
+    private final MapSearchProjectionService mapSearchProjectionService;
     private final ObjectMapper objectMapper;
 
     public MapPersistenceService(
@@ -33,12 +35,14 @@ public class MapPersistenceService {
             RecipePayloadValidator recipePayloadValidator,
             MapProjectRepository mapProjectRepository,
             MapVersionRepository mapVersionRepository,
+            MapSearchProjectionService mapSearchProjectionService,
             ObjectMapper objectMapper
     ) {
         this.devUserProvider = devUserProvider;
         this.recipePayloadValidator = recipePayloadValidator;
         this.mapProjectRepository = mapProjectRepository;
         this.mapVersionRepository = mapVersionRepository;
+        this.mapSearchProjectionService = mapSearchProjectionService;
         this.objectMapper = objectMapper;
     }
 
@@ -86,7 +90,9 @@ public class MapPersistenceService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "title must not be blank");
         }
         project.updateDetails(title, normalizeOptionalDescription(request.description()), request.visibility());
-        return toProjectResponse(project, currentVersion(project));
+        MapVersion currentVersion = currentVersion(project);
+        mapSearchProjectionService.syncProject(project, currentVersion);
+        return toProjectResponse(project, currentVersion);
     }
 
     @Transactional
@@ -101,6 +107,7 @@ public class MapPersistenceService {
         );
         MapVersion version = saveVersion(project, payload);
         project.setCurrentVersionId(version.getId());
+        mapSearchProjectionService.syncProject(project, version);
         return toVersionResponse(version);
     }
 
