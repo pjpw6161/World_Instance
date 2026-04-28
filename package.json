@@ -4,16 +4,23 @@
   "private": true,
   "workspaces": [
     "apps/web",
+    "engine/wasm-engine/ts",
     "packages/shared"
   ],
   "scripts": {
     "web:dev": "npm --workspace web run dev",
     "web:build": "npm --workspace web run build",
     "web:lint": "npm --workspace web run lint",
+    "web:test": "npm --workspace web run test",
     "shared:build": "npm --workspace @world-forge/shared run build",
+    "shared:test": "npm --workspace @world-forge/shared run test",
     "shared:typecheck": "npm --workspace @world-forge/shared run typecheck",
+    "wasm:build": "powershell -ExecutionPolicy Bypass -File engine/wasm-engine/scripts/build-wasm.ps1",
+    "wasm-wrapper:build": "npm run shared:build && npm --workspace @world-forge/wasm-engine run build",
+    "wasm-wrapper:test": "npm --workspace @world-forge/wasm-engine run test",
+    "wasm-wrapper:typecheck": "npm run shared:build && npm --workspace @world-forge/wasm-engine run typecheck",
     "api:test": "cd apps/api && gradlew.bat test",
     "infra:config": "docker compose -f infra/docker-compose.yml config",
-    "verify": "npm run shared:build && npm run web:build && npm run api:test && npm run infra:config"
+    "verify": "npm run shared:build && npm run shared:test && npm run wasm-wrapper:build && npm run wasm-wrapper:test && npm run web:build && npm run web:test && npm run api:test && npm run infra:config"
   }
 }

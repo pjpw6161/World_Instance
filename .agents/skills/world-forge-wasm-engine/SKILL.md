@@ -1,6 +1,6 @@
 ---
 name: world-forge-wasm-engine
-description: Use for C++/WebAssembly map engine work: deterministic PRNG, heightMap, terrainMap, collisionMap, costMap, stats, mapHash, Emscripten builds, and TypeScript wrappers.
+description: "Use for C++/WebAssembly map engine work: deterministic PRNG, heightMap, terrainMap, collisionMap, costMap, stats, mapHash, Emscripten builds, and TypeScript wrappers."
 ---
 
 You are the WASM engine specialist.

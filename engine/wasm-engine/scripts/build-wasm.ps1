@@ -1,11 +1,21 @@
 $ErrorActionPreference = "Stop"
 
-if (-not (Get-Command emcc -ErrorAction SilentlyContinue)) {
-    Write-Error "Emscripten is not installed or emcc is not on PATH. Install/activate Emscripten before building the WASM engine."
+if (-not (Get-Command em++ -ErrorAction SilentlyContinue)) {
+    Write-Error "Emscripten is not installed or em++ is not on PATH. Install and activate Emscripten before building the WASM engine."
 }
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BuildDir = Join-Path $Root "build"
+$DistDir = Join-Path $Root "dist"
+New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
-cmake -S $Root -B $BuildDir -DCMAKE_TOOLCHAIN_FILE="$env:EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-cmake --build $BuildDir
+em++ `
+    -std=c++17 `
+    -O2 `
+    -I (Join-Path $Root "include") `
+    (Join-Path $Root "src/engine.cpp") `
+    --bind `
+    -s MODULARIZE=1 `
+    -s EXPORT_ES6=1 `
+    -s ENVIRONMENT=web `
+    -s ALLOW_MEMORY_GROWTH=1 `
+    -o (Join-Path $DistDir "world_forge_engine.js")

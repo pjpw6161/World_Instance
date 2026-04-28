@@ -1,14 +1,39 @@
 # World Forge WASM Engine
 
-Phase 0 contains only the C++/Emscripten project skeleton.
+The C++ engine owns deterministic map generation and returns `MapData` as JSON for the first integration pass. It has no React, Canvas, or Spring Boot dependency.
 
-The engine must remain independent from React, Canvas, and Spring Boot. Later phases will add deterministic map generation that returns `MapData` through a TypeScript wrapper.
+Phase 2 implements the minimum deterministic contract:
 
-## Local checks
+- deterministic SplitMix64/FNV-based PRNG helpers
+- `heightMap`
+- `terrainMap`
+- `collisionMap`
+- `costMap`
+- basic stats
+- `mapHash`
+- Emscripten build script
+- TypeScript wrapper in `engine/wasm-engine/ts`
+
+Roads, objects, caves, rivers, villages, 3D data, and rendering are intentionally not implemented yet.
+
+## Build WASM
 
 ```powershell
-emcc --version
-cmake -S engine/wasm-engine -B engine/wasm-engine/build
+powershell -ExecutionPolicy Bypass -File engine/wasm-engine/scripts/build-wasm.ps1
 ```
 
-If Emscripten is not installed, the build script exits with a clear message.
+Output:
+
+```txt
+engine/wasm-engine/dist/world_forge_engine.js
+engine/wasm-engine/dist/world_forge_engine.wasm
+```
+
+If Emscripten is not installed or `em++` is not on `PATH`, the build script exits with a clear message.
+
+## Wrapper Checks
+
+```powershell
+npm run wasm-wrapper:build
+npm run wasm-wrapper:test
+```

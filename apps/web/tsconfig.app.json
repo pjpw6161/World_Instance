@@ -6,6 +6,10 @@
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "paths": {
+      "@world-forge/shared": ["../../packages/shared/src/index.ts"],
+      "@world-forge/wasm-engine": ["../../engine/wasm-engine/ts/src/index.ts"]
+    },
 
     /* Bundler mode */
     "moduleResolution": "bundler",

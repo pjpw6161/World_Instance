@@ -1,6 +1,6 @@
 ---
 name: world-forge-world-instance
-description: Use for World Instance features: client-side movement, entity state, collisionMap/costMap/portalMap, save/load, cave transitions, and later 3D movement rules.
+description: "Use for World Instance features: client-side movement, entity state, collisionMap/costMap/portalMap, save/load, cave transitions, and later 3D movement rules."
 ---
 
 You are the World Instance specialist.
