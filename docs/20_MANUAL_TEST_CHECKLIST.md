@@ -354,7 +354,8 @@ Pass criteria:
 - The player does not enter blocked tree or cave-wall tiles.
 - Road movement reports a lower move cost than forest movement when those costs are present in `MapData.costMap`.
 - A low height difference can be crossed, but a height difference greater than the entity `jumpHeight` or `maxSlope` is blocked or routed around.
-- The 3D marker height and movement-readiness ring agree with the same World Instance state used by 2D.
+- Switch to `3D` and confirm the movement-readiness ring agrees with the same blocked/reachable directions observed in 2D.
+- Player and entity z positions are derived from `heightMap` and visually sit on the terrain.
 - Movement remains client-side.
 
 ## 17. State Save and Load
@@ -374,6 +375,7 @@ Invoke-RestMethod "$api/api/world-instances/$worldId/state" -Headers $headers
 Pass criteria:
 
 - The saved player/entity positions, `layerId`, and state are restored after reload.
+- The saved player/entity `jumpHeight` and `maxSlope` values are restored after reload.
 - A player saved inside a cave reloads on the cave layer.
 - The API response includes saved entities.
 

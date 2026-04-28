@@ -145,8 +145,8 @@ export function EditorPage() {
           <a className="text-link" href="/maps">
             My Maps
           </a>
-          <a className="text-link" href="/search">
-            Search
+          <a className="text-link" href="/gallery">
+            Gallery
           </a>
           <AuthStatus />
         </nav>

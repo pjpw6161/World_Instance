@@ -18,6 +18,7 @@ public record MapSearchRequest(
         Integer maxHeight,
         Map<String, NumericRange> stats,
         Map<String, NumericRange> livingStats,
+        String sort,
         int page,
         int size
 ) {

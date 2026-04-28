@@ -57,10 +57,12 @@ export interface MapProjectPayload {
 export interface MapSearchResultPayload {
   projectId: string;
   versionId: string;
+  ownerNickname?: string | null;
   title: string;
   description: string;
   mapType: string;
   mapHash: string;
+  thumbnailUrl?: string | null;
   engineVersion: string;
   width: number;
   height: number;
@@ -102,6 +104,7 @@ export interface MapSearchFacetsPayload {
   caveCreatureCounts: FacetBucketPayload[];
   reachableAreaRatios: FacetBucketPayload[];
   portalCounts: FacetBucketPayload[];
+  blockedTileRatios: FacetBucketPayload[];
 }
 
 export interface CreateMapProjectInput {
@@ -123,9 +126,31 @@ export interface SearchMapsInput {
   keyword?: string;
   features?: string;
   mapType?: string;
+  terrainAlgorithm?: string;
+  caveAlgorithm?: string;
+  roadAlgorithm?: string;
+  objectPlacementAlgorithm?: string;
   livingActivity?: string;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  minForestRatio?: number;
+  maxForestRatio?: number;
+  minMountainRatio?: number;
+  maxMountainRatio?: number;
+  minWaterRatio?: number;
+  maxWaterRatio?: number;
+  minLandRatio?: number;
+  maxLandRatio?: number;
   minCreatureCount?: number;
+  maxCreatureCount?: number;
   minReachableAreaRatio?: number;
+  maxReachableAreaRatio?: number;
+  minPortalCount?: number;
+  maxPortalCount?: number;
+  sort?: "newest" | "popular" | "mostCreatures" | "mostExplorable";
+  page?: number;
   size?: number;
 }
 
@@ -171,6 +196,10 @@ export async function listMyMaps(): Promise<MapProjectPayload[]> {
   return fetchJson<MapProjectPayload[]>("/api/me/maps");
 }
 
+export async function fetchMapProject(projectId: string): Promise<MapProjectPayload> {
+  return fetchJson<MapProjectPayload>(`/api/maps/${projectId}`, undefined, { auth: false });
+}
+
 export async function updateMapProjectVisibility(projectId: string, visibility: MapVisibility): Promise<MapProjectPayload> {
   return fetchJson<MapProjectPayload>(`/api/maps/${projectId}`, {
     method: "PATCH",
@@ -207,9 +236,31 @@ export async function searchMaps(input: SearchMapsInput): Promise<MapSearchPaylo
   appendParam(params, "keyword", input.keyword);
   appendParam(params, "features", input.features);
   appendParam(params, "mapType", input.mapType);
+  appendParam(params, "terrainAlgorithm", input.terrainAlgorithm);
+  appendParam(params, "caveAlgorithm", input.caveAlgorithm);
+  appendParam(params, "roadAlgorithm", input.roadAlgorithm);
+  appendParam(params, "objectPlacementAlgorithm", input.objectPlacementAlgorithm);
   appendParam(params, "livingActivity", input.livingActivity);
+  appendParam(params, "minWidth", input.minWidth);
+  appendParam(params, "maxWidth", input.maxWidth);
+  appendParam(params, "minHeight", input.minHeight);
+  appendParam(params, "maxHeight", input.maxHeight);
+  appendParam(params, "minForestRatio", input.minForestRatio);
+  appendParam(params, "maxForestRatio", input.maxForestRatio);
+  appendParam(params, "minMountainRatio", input.minMountainRatio);
+  appendParam(params, "maxMountainRatio", input.maxMountainRatio);
+  appendParam(params, "minWaterRatio", input.minWaterRatio);
+  appendParam(params, "maxWaterRatio", input.maxWaterRatio);
+  appendParam(params, "minLandRatio", input.minLandRatio);
+  appendParam(params, "maxLandRatio", input.maxLandRatio);
   appendParam(params, "minCreatureCount", input.minCreatureCount);
+  appendParam(params, "maxCreatureCount", input.maxCreatureCount);
   appendParam(params, "minReachableAreaRatio", input.minReachableAreaRatio);
+  appendParam(params, "maxReachableAreaRatio", input.maxReachableAreaRatio);
+  appendParam(params, "minPortalCount", input.minPortalCount);
+  appendParam(params, "maxPortalCount", input.maxPortalCount);
+  appendParam(params, "sort", input.sort);
+  appendParam(params, "page", input.page);
   appendParam(params, "size", input.size);
   const suffix = params.toString();
   return fetchJson<MapSearchPayload>(`/api/search/maps${suffix ? `?${suffix}` : ""}`, undefined, { auth: false });

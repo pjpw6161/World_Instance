@@ -67,6 +67,23 @@ function drawWorld(canvas: HTMLCanvasElement, mapData: MapData, entities: readon
     context.stroke();
   }
 
+  for (const object of mapData.objectList) {
+    if (object.layerId !== activeLayerId) {
+      continue;
+    }
+    context.fillStyle = objectColor(object.type);
+    context.beginPath();
+    if (object.type === "cave-entrance") {
+      context.arc(object.x + 0.5, object.y + 0.5, 2.1, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "#f4d6ff";
+      context.lineWidth = 0.35;
+      context.stroke();
+    } else {
+      context.fillRect(object.x - 1, object.y - 1, 3, 3);
+    }
+  }
+
   for (const entity of entities) {
     if (entity.layerId !== activeLayerId) {
       continue;
@@ -78,5 +95,22 @@ function drawWorld(canvas: HTMLCanvasElement, mapData: MapData, entities: readon
     context.strokeStyle = entity.entityType === "player" ? "#26322d" : "#fff4ed";
     context.lineWidth = 0.45;
     context.stroke();
+  }
+}
+
+function objectColor(type: string): string {
+  switch (type) {
+    case "tree":
+      return "#163f2a";
+    case "rock":
+      return "#4c514f";
+    case "cave-entrance":
+      return "#7d4aa2";
+    case "village":
+      return "#d9a441";
+    case "road-node":
+      return "#7f6342";
+    default:
+      return "#26322d";
   }
 }

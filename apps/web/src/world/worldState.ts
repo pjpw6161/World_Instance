@@ -50,6 +50,17 @@ interface PathNode {
 const surfaceLayer = "surface";
 const maxTileCost = 254;
 const defaultMaxVisited = 768;
+const terrainCost: Record<string, number> = {
+  "deep-water": Number.POSITIVE_INFINITY,
+  water: Number.POSITIVE_INFINITY,
+  sand: 2,
+  grass: 2,
+  forest: 4,
+  mountain: 8,
+  road: 1,
+  "cave-floor": 2,
+  "cave-wall": Number.POSITIVE_INFINITY,
+};
 const wanderOffsets = [
   [0, 0],
   [1, 0],
@@ -175,8 +186,7 @@ export function tickWanderingEntities(
     if (nextMoveAt(entity) > worldTime) {
       return entity;
     }
-    const target = wanderTarget(entity, worldTime, mapData);
-    const path = findPath(mapData, entity, target, { maxVisited: 384 });
+    const path = chooseWanderPath(mapData, entity, worldTime);
     if (path.length === 0) {
       return {
         ...entity,
@@ -218,10 +228,13 @@ export function movementCostAt(mapData: MapData, entity: WorldEntity, x: number,
   if (!isInsideMap(mapData, x, y)) {
     return Number.POSITIVE_INFINITY;
   }
-  const baseCost = mapData.costMap[y * mapData.width + x] ?? maxTileCost;
-  if (baseCost >= maxTileCost) {
+  const tileIndex = y * mapData.width + x;
+  const costFromMap = mapData.costMap[tileIndex] ?? Number.NaN;
+  const costFromTerrain = terrainCost[mapData.terrainMap[tileIndex] ?? "grass"] ?? terrainCost.grass;
+  if (costFromMap >= maxTileCost || !Number.isFinite(costFromTerrain)) {
     return Number.POSITIVE_INFINITY;
   }
+  const baseCost = normalizeTileCost(costFromMap, costFromTerrain);
   return Math.max(1, Math.ceil(baseCost * entity.movementCostMultiplier));
 }
 
@@ -420,7 +433,7 @@ function applyPortalTransition(mapData: MapData, entity: WorldEntity): WorldEnti
   };
 }
 
-function canMoveBetween(mapData: MapData, entity: WorldEntity, fromX: number, fromY: number, toX: number, toY: number): boolean {
+export function canMoveBetween(mapData: MapData, entity: WorldEntity, fromX: number, fromY: number, toX: number, toY: number): boolean {
   if (!canEnterTile(mapData, entity, toX, toY)) {
     return false;
   }
@@ -453,6 +466,20 @@ function hasBlockingObject(mapData: MapData, layerId: string, x: number, y: numb
 
 function objectBlocksMovement(type: string): boolean {
   return type === "tree" || type === "rock";
+}
+
+function normalizeTileCost(costFromMap: number, costFromTerrain: number): number {
+  const rawCost = Number.isFinite(costFromMap) && costFromMap > 0 ? costFromMap : costFromTerrain;
+  if (!Number.isFinite(rawCost)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (costFromTerrain === terrainCost.road) {
+    return terrainCost.road;
+  }
+  if (costFromTerrain >= terrainCost.forest) {
+    return Math.max(rawCost, costFromTerrain);
+  }
+  return rawCost;
 }
 
 function withEntityDefaults(entity: WorldEntity): WorldEntity {
@@ -498,14 +525,34 @@ function defaultMaxSlope(entityType: EntityType): number {
   }
 }
 
-function wanderTarget(entity: WorldEntity, worldTime: number, mapData: MapData): { x: number; y: number } {
-  const [dx, dy] = wanderOffsets[hashString(`${entity.entityKey}:${worldTime}`) % wanderOffsets.length];
+function chooseWanderPath(mapData: MapData, entity: WorldEntity, worldTime: number): { x: number; y: number }[] {
+  const offsetStart = hashString(`${entity.entityKey}:${worldTime}`) % wanderOffsets.length;
   const homeX = entity.homeX ?? entity.x;
   const homeY = entity.homeY ?? entity.y;
-  return {
-    x: clampInteger(homeX + dx, 0, mapData.width - 1),
-    y: clampInteger(homeY + dy, 0, mapData.height - 1),
-  };
+  let bestPath: { x: number; y: number }[] = [];
+  let bestCost = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < wanderOffsets.length; index += 1) {
+    const [dx, dy] = wanderOffsets[(offsetStart + index) % wanderOffsets.length];
+    if (dx === 0 && dy === 0) {
+      continue;
+    }
+    const target = {
+      x: clampInteger(homeX + dx, 0, mapData.width - 1),
+      y: clampInteger(homeY + dy, 0, mapData.height - 1),
+    };
+    const path = findPath(mapData, entity, target, { maxVisited: 384 });
+    if (path.length === 0) {
+      continue;
+    }
+    const pathCost = path.reduce((total, step) => total + movementCostAt(mapData, entity, step.x, step.y), 0);
+    if (pathCost < bestCost) {
+      bestCost = pathCost;
+      bestPath = path;
+    }
+  }
+
+  return bestPath;
 }
 
 function nextMoveAt(entity: WorldEntity): number {

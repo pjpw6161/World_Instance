@@ -106,9 +106,39 @@ describe("world API client", () => {
       size: 20,
     })));
 
-    await searchMaps({ keyword: "forest" });
+    await searchMaps({
+      keyword: "forest",
+      features: "trees,roads",
+      mapType: "forest",
+      terrainAlgorithm: "noise-island",
+      caveAlgorithm: "cellular-automata",
+      roadAlgorithm: "astar",
+      minWidth: 128,
+      maxWidth: 512,
+      minHeight: 128,
+      maxHeight: 512,
+      minForestRatio: 0.2,
+      minMountainRatio: 0.1,
+      minWaterRatio: 0.05,
+      minLandRatio: 0.5,
+      minCreatureCount: 3,
+      minReachableAreaRatio: 0.7,
+      minPortalCount: 1,
+      sort: "mostExplorable",
+      size: 20,
+    });
 
-    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).toContain("/api/search/maps?");
+    expect(url).toContain("keyword=forest");
+    expect(url).toContain("features=trees%2Croads");
+    expect(url).toContain("terrainAlgorithm=noise-island");
+    expect(url).toContain("minForestRatio=0.2");
+    expect(url).toContain("minCreatureCount=3");
+    expect(url).toContain("minReachableAreaRatio=0.7");
+    expect(url).toContain("minPortalCount=1");
+    expect(url).toContain("sort=mostExplorable");
+    expect(url).not.toContain("query=");
     expect(new Headers(init?.headers).has("Authorization")).toBe(false);
   });
 

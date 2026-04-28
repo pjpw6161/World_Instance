@@ -96,7 +96,7 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
     if (!player || !portalAt(mapData, player.layerId, player.x, player.y)) {
       return;
     }
-    setEntities(activatePlayerPortal(mapData, entities));
+    setEntities((currentEntities) => activatePlayerPortal(mapData, currentEntities));
     setWorldTime((currentTime) => currentTime + 1);
   }, [entities, mapData, status]);
 
@@ -139,12 +139,14 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
         return;
       }
       event.preventDefault();
-      setEntities((currentEntities) => movePlayer(mapData, currentEntities, direction.dx, direction.dy, worldTime));
-      setWorldTime((currentTime) => currentTime + 1);
+      setWorldTime((currentTime) => {
+        setEntities((currentEntities) => movePlayer(mapData, currentEntities, direction.dx, direction.dy, currentTime));
+        return currentTime + 1;
+      });
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activateCurrentPortal, mapData, status, worldTime]);
+  }, [activateCurrentPortal, mapData, status]);
 
   const player = entities.find((entity) => entity.entityType === "player");
   const activeLayerId = activeLayerForEntities(entities);

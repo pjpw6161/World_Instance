@@ -3,11 +3,7 @@ package com.worldforge.api.search;
 import com.worldforge.api.domain.MapProject;
 import com.worldforge.api.domain.MapVersion;
 import com.worldforge.api.domain.MapVisibility;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -19,7 +15,6 @@ import java.util.UUID;
 
 @Service
 public class MapSearchProjectionService {
-    private static final Logger logger = LoggerFactory.getLogger(MapSearchProjectionService.class);
     private static final double MAX_MAP_SIZE = 512.0;
 
     private final MapSearchIndexClient indexClient;
@@ -32,15 +27,11 @@ public class MapSearchProjectionService {
 
     public void syncProject(MapProject project, MapVersion currentVersion) {
         if (project.getVisibility() != MapVisibility.PUBLIC || currentVersion == null) {
-            removeProject(project.getId());
+            indexClient.delete(project.getId());
             return;
         }
         MapSearchDocument document = toDocument(project, currentVersion);
-        afterCommit(() -> indexClient.index(document));
-    }
-
-    public void removeProject(UUID projectId) {
-        afterCommit(() -> indexClient.delete(projectId));
+        indexClient.index(document);
     }
 
     public void removeProjectImmediately(UUID projectId) {
@@ -55,10 +46,12 @@ public class MapSearchProjectionService {
                 project.getId(),
                 version.getId(),
                 project.getOwner().getId(),
+                project.getOwner().getNickname(),
                 project.getTitle(),
                 project.getDescription(),
                 mapType(stats),
                 version.getMapHash(),
+                version.getThumbnailUrl(),
                 version.getEngineVersion(),
                 version.getSeed(),
                 version.getWidth(),
@@ -108,6 +101,7 @@ public class MapSearchProjectionService {
         copyIfPresent(values, livingStats, "caveCreatureCount");
         copyIfPresent(values, livingStats, "portalCount");
         copyIfPresent(values, livingStats, "reachableAreaRatio");
+        copyIfPresent(values, livingStats, "blockedTileRatio");
         copyIfPresent(values, livingStats, "npcCount");
         return values;
     }
@@ -132,6 +126,7 @@ public class MapSearchProjectionService {
         copyNumeric(stats, values, "portalCount");
         copyNumeric(stats, values, "npcCount");
         copyNumeric(stats, values, "reachableAreaRatio");
+        copyNumeric(stats, values, "blockedTileRatio");
 
         double area = Math.max(1.0, (double) width * height);
         double surfaceCreatureCount = values.getOrDefault("surfaceCreatureCount", -1.0);
@@ -154,6 +149,7 @@ public class MapSearchProjectionService {
         }
         values.putIfAbsent("portalCount", 0.0);
         values.putIfAbsent("reachableAreaRatio", doubleAt(stats, "reachableAreaRatio", 0.0));
+        values.putIfAbsent("blockedTileRatio", doubleAt(stats, "blockedTileRatio", doubleAt(stats, "blockedRatio", 0.0)));
 
         double npcCount = values.getOrDefault("npcCount", 0.0);
         values.putIfAbsent("creatureDensity", creatureCount / area);
@@ -171,6 +167,7 @@ public class MapSearchProjectionService {
         values.put("mountainRatio", doubleAt(stats, "mountainRatio", 0.0));
         values.put("caveAreaRatio", doubleAt(stats, "caveAreaRatio", 0.0));
         values.put("blockedRatio", doubleAt(stats, "blockedRatio", 0.0));
+        values.put("blockedTileRatio", livingStats.getOrDefault("blockedTileRatio", doubleAt(stats, "blockedTileRatio", doubleAt(stats, "blockedRatio", 0.0))));
         values.put("reachableAreaRatio", doubleAt(stats, "reachableAreaRatio", 0.0));
         values.put("treeDensity", density(doubleAt(stats, "treeCount", 0.0), width, height));
         values.put("roadDensity", density(doubleAt(stats, "roadLength", 0.0), width, height));
@@ -254,27 +251,5 @@ public class MapSearchProjectionService {
 
     private double normalize(double value, double max) {
         return Math.max(0.0, Math.min(1.0, value / max));
-    }
-
-    private void afterCommit(Runnable task) {
-        Runnable guarded = () -> {
-            try {
-                task.run();
-            } catch (RuntimeException exception) {
-                logger.warn("Map search projection update failed", exception);
-            }
-        };
-
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            guarded.run();
-            return;
-        }
-
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                guarded.run();
-            }
-        });
     }
 }

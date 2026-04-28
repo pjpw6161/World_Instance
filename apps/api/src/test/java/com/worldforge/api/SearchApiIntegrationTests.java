@@ -89,6 +89,7 @@ class SearchApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.results[0].projectId").value(projectId.toString()))
+                .andExpect(jsonPath("$.results[0].ownerNickname").value("Test User"))
                 .andExpect(jsonPath("$.results[0].features[0]").value("forests"));
 
         mockMvc.perform(get("/api/search/maps")
@@ -101,6 +102,29 @@ class SearchApiIntegrationTests {
                 .andExpect(jsonPath("$.visibility").value("PRIVATE"));
 
         mockMvc.perform(get("/api/search/maps").param("keyword", "Forest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @Test
+    void rejectsPublicPublishWhenProjectionIndexFails() throws Exception {
+        String token = AuthTestSupport.bearerToken(mockMvc, objectMapper);
+        JsonNode created = postJson("/api/maps", createMapPayload("Index Failure Candidate", 11111, "search-hash-index-failure", 0.24), token)
+                .andExpect(status().isCreated())
+                .andReturnJson();
+        UUID projectId = UUID.fromString(created.get("id").asText());
+
+        searchIndexClient.failIndexFor(projectId);
+
+        patchJson("/api/maps/" + projectId, Map.of("visibility", "PUBLIC"), token)
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("SEARCH_REQUEST_FAILED"));
+
+        mockMvc.perform(get("/api/maps/" + projectId).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visibility").value("PRIVATE"));
+
+        mockMvc.perform(get("/api/search/maps").param("keyword", "Index Failure"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(0));
     }
@@ -160,15 +184,19 @@ class SearchApiIntegrationTests {
                         .param("minSurfaceCreatureCount", "8")
                         .param("minCaveCreatureCount", "1")
                         .param("minPortalCount", "1")
-                        .param("minLivingDensity", "0.0001"))
+                        .param("maxBlockedTileRatio", "0.2")
+                        .param("minLivingDensity", "0.0001")
+                        .param("sort", "mostCreatures"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.results[0].projectId").value(neighborProjectId.toString()))
                 .andExpect(jsonPath("$.results[0].livingActivity").value("inhabited"))
                 .andExpect(jsonPath("$.results[0].livingStats.creatureCount").isNumber())
                 .andExpect(jsonPath("$.results[0].livingStats.surfaceCreatureCount").isNumber())
                 .andExpect(jsonPath("$.results[0].livingStats.caveCreatureCount").isNumber())
                 .andExpect(jsonPath("$.results[0].livingStats.reachableAreaRatio").isNumber())
-                .andExpect(jsonPath("$.results[0].livingStats.portalCount").isNumber());
+                .andExpect(jsonPath("$.results[0].livingStats.portalCount").isNumber())
+                .andExpect(jsonPath("$.results[0].livingStats.blockedTileRatio").isNumber());
 
         mockMvc.perform(get("/api/search/maps/facets"))
                 .andExpect(status().isOk())
@@ -177,7 +205,8 @@ class SearchApiIntegrationTests {
                 .andExpect(jsonPath("$.surfaceCreatureCounts[0].value").isString())
                 .andExpect(jsonPath("$.caveCreatureCounts[0].value").isString())
                 .andExpect(jsonPath("$.reachableAreaRatios[0].value").isString())
-                .andExpect(jsonPath("$.portalCounts[0].value").isString());
+                .andExpect(jsonPath("$.portalCounts[0].value").isString())
+                .andExpect(jsonPath("$.blockedTileRatios[0].value").isString());
 
         mockMvc.perform(get("/api/search/maps/" + sourceProjectId + "/similar").param("size", "2"))
                 .andExpect(status().isOk())
@@ -219,7 +248,8 @@ class SearchApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.results[0].projectId").value(publicProjectId.toString()))
-                .andExpect(jsonPath("$.results[0].livingStats.portalCount").isNumber());
+                .andExpect(jsonPath("$.results[0].livingStats.portalCount").isNumber())
+                .andExpect(jsonPath("$.results[0].livingStats.blockedTileRatio").value(0.15));
 
         mockMvc.perform(get("/api/search/maps").param("keyword", "Private Reindex"))
                 .andExpect(status().isOk())
@@ -349,6 +379,7 @@ class SearchApiIntegrationTests {
                 "surfaceCreatureCount", surfaceCreatureCount,
                 "caveCreatureCount", caveCreatureCount,
                 "reachableAreaRatio", reachableAreaRatio,
+                "blockedTileRatio", 0.15,
                 "portalCount", portalCount,
                 "npcCount", npcCount,
                 "livingDensity", (creatureCount + npcCount) / 65_536.0,
@@ -365,10 +396,12 @@ class SearchApiIntegrationTests {
                 projectId,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
+                "Stale Owner",
                 "Private Reindex Map",
                 "Stale private projection that must be removed",
                 "mixed",
                 "stale-private-hash",
+                null,
                 "0.1.0",
                 1,
                 256,
@@ -386,6 +419,7 @@ class SearchApiIntegrationTests {
                         "caveCreatureCount", 1.0,
                         "reachableAreaRatio", 0.7,
                         "portalCount", 1.0,
+                        "blockedTileRatio", 0.15,
                         "livingDensity", 0.00005
                 ),
                 Map.of("forestRatio", 0.24, "livingDensity", 0.00005, "portalDensity", 0.00002),
@@ -405,10 +439,14 @@ class SearchApiIntegrationTests {
 
     static class RecordingMapSearchIndexClient implements MapSearchIndexClient {
         private final Map<UUID, MapSearchDocument> documents = new ConcurrentHashMap<>();
+        private final Set<UUID> indexFailures = ConcurrentHashMap.newKeySet();
         private final Set<UUID> deleteFailures = ConcurrentHashMap.newKeySet();
 
         @Override
         public void index(MapSearchDocument document) {
+            if (indexFailures.contains(document.projectId())) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "SEARCH_REQUEST_FAILED", "Elasticsearch request failed");
+            }
             documents.put(document.projectId(), document);
         }
 
@@ -433,7 +471,7 @@ class SearchApiIntegrationTests {
             List<MapSearchResultResponse> results = documents.values()
                     .stream()
                     .filter(document -> matches(document, request))
-                    .sorted(Comparator.comparing(MapSearchDocument::updatedAt).reversed())
+                    .sorted(searchComparator(request.sort()))
                     .map(MapSearchResultResponse::fromDocument)
                     .toList();
             int from = Math.min(results.size(), request.page() * request.size());
@@ -473,13 +511,19 @@ class SearchApiIntegrationTests {
                     buckets(documents.values().stream().map(document -> countBucket(document.livingStats().getOrDefault("surfaceCreatureCount", 0.0))).toList()),
                     buckets(documents.values().stream().map(document -> countBucket(document.livingStats().getOrDefault("caveCreatureCount", 0.0))).toList()),
                     buckets(documents.values().stream().map(document -> ratioBucket(document.livingStats().getOrDefault("reachableAreaRatio", 0.0))).toList()),
-                    buckets(documents.values().stream().map(document -> portalBucket(document.livingStats().getOrDefault("portalCount", 0.0))).toList())
+                    buckets(documents.values().stream().map(document -> portalBucket(document.livingStats().getOrDefault("portalCount", 0.0))).toList()),
+                    buckets(documents.values().stream().map(document -> ratioBucket(document.livingStats().getOrDefault("blockedTileRatio", 0.0))).toList())
             );
         }
 
         void clear() {
             documents.clear();
+            indexFailures.clear();
             deleteFailures.clear();
+        }
+
+        void failIndexFor(UUID projectId) {
+            indexFailures.add(projectId);
         }
 
         void failDeleteFor(UUID projectId) {
@@ -528,6 +572,28 @@ class SearchApiIntegrationTests {
                 }
             }
             return true;
+        }
+
+        private Comparator<MapSearchDocument> searchComparator(String sort) {
+            Comparator<MapSearchDocument> newest = Comparator.comparing(MapSearchDocument::updatedAt).reversed();
+            return switch (sort) {
+                case "popular" -> Comparator
+                        .comparingDouble((MapSearchDocument document) -> document.mapDna().getOrDefault("livingDensity", 0.0))
+                        .reversed()
+                        .thenComparing(newest);
+                case "mostCreatures" -> Comparator
+                        .comparingDouble((MapSearchDocument document) -> document.livingStats().getOrDefault("creatureCount", 0.0))
+                        .reversed()
+                        .thenComparing(newest);
+                case "mostExplorable" -> Comparator
+                        .comparingDouble((MapSearchDocument document) -> document.livingStats().getOrDefault("reachableAreaRatio", 0.0))
+                        .reversed()
+                        .thenComparing(Comparator
+                                .comparingDouble((MapSearchDocument document) -> document.livingStats().getOrDefault("portalCount", 0.0))
+                                .reversed())
+                        .thenComparing(newest);
+                default -> newest;
+            };
         }
 
         private double similarityScore(MapSearchDocument target, MapSearchDocument candidate) {

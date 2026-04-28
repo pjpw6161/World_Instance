@@ -7,6 +7,7 @@ import {
   fromEntityStateDto,
   isWalkable,
   movePlayer,
+  movementCostAt,
   serializeWorldEntities,
   tickWanderingEntities,
   type WorldEntity,
@@ -142,6 +143,29 @@ describe("world instance client state", () => {
     expect(readyMove[0]).toMatchObject({ x: 2, y: 0, state: "moving" });
   });
 
+  it("normalizes terrain movement rules from costMap and terrainMap", () => {
+    const mapData: MapData = {
+      ...sampleMapData,
+      width: 5,
+      height: 1,
+      heightMap: [0.2, 0.2, 0.2, 0.2, 0.2],
+      terrainMap: ["road", "grass", "forest", "water", "cave-wall"],
+      objectList: [],
+      collisionMap: [false, false, false, false, false],
+      costMap: [9, 0, 1, 1, 1],
+      portalList: [],
+    };
+    const player = entityAt("player", "player", 0, 0);
+
+    expect(movementCostAt(mapData, player, 0, 0)).toBe(1);
+    expect(movementCostAt(mapData, player, 1, 0)).toBe(2);
+    expect(movementCostAt(mapData, player, 2, 0)).toBe(4);
+    expect(movementCostAt(mapData, player, 3, 0)).toBe(Number.POSITIVE_INFINITY);
+    expect(movementCostAt(mapData, player, 4, 0)).toBe(Number.POSITIVE_INFINITY);
+    expect(isWalkable(mapData, 3, 0, player)).toBe(false);
+    expect(isWalkable(mapData, 4, 0, player)).toBe(false);
+  });
+
   it("avoids blocked objects when pathfinding for wandering entities", () => {
     const mapData: MapData = {
       ...sampleMapData,
@@ -166,6 +190,8 @@ describe("world instance client state", () => {
     const entity = {
       ...entityAt("player", "player", 1, 0),
       layerId: "cave",
+      jumpHeight: 0.55,
+      maxSlope: 0.22,
       state: "transitioning",
       metadataJson: {
         lastPortalId: "surface-to-cave",
@@ -182,12 +208,16 @@ describe("world instance client state", () => {
     expect(payload).toMatchObject({
       entityKey: "player",
       layerId: "cave",
+      jumpHeight: 0.55,
+      maxSlope: 0.22,
       state: "transitioning",
       metadataJson: { lastPortalId: "surface-to-cave" },
     });
     expect(restored).toMatchObject({
       entityKey: "player",
       layerId: "cave",
+      jumpHeight: 0.55,
+      maxSlope: 0.22,
       state: "transitioning",
       metadataJson: { lastPortalId: "surface-to-cave" },
     });

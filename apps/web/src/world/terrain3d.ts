@@ -1,5 +1,5 @@
 import type { MapData, TerrainType } from "@world-forge/shared";
-import { canTraverseHeightDiff, type WorldEntity } from "./worldState";
+import { canMoveBetween, type WorldEntity } from "./worldState";
 
 export type Terrain3DViewMode = "orbit" | "top" | "side";
 
@@ -7,6 +7,7 @@ export interface TerrainMeshOptions {
   maxSamples?: number;
   terrainWidth?: number;
   heightScale?: number;
+  layerId?: string;
 }
 
 export interface TerrainMeshData {
@@ -18,6 +19,7 @@ export interface TerrainMeshData {
   terrainWidth: number;
   terrainDepth: number;
   heightScale: number;
+  layerId: string;
 }
 
 export interface TerrainPoint3D {
@@ -57,6 +59,40 @@ const terrainPalette: Record<TerrainType, [number, number, number]> = {
   "cave-wall": [0.16, 0.14, 0.13],
 };
 
+export interface TerrainLayerSceneStyle {
+  backgroundColor: number;
+  fogColor: number;
+  ambientSkyColor: number;
+  ambientGroundColor: number;
+  ambientIntensity: number;
+  keyLightColor: number;
+  keyLightIntensity: number;
+}
+
+export function terrainLayerSceneStyle(layerId: string): TerrainLayerSceneStyle {
+  if (isCaveLayer(layerId)) {
+    return {
+      backgroundColor: 0x171513,
+      fogColor: 0x171513,
+      ambientSkyColor: 0x4b4038,
+      ambientGroundColor: 0x17110f,
+      ambientIntensity: 1.7,
+      keyLightColor: 0xf3d9aa,
+      keyLightIntensity: 1.45,
+    };
+  }
+
+  return {
+    backgroundColor: 0xe6ede8,
+    fogColor: 0xe6ede8,
+    ambientSkyColor: 0xffffff,
+    ambientGroundColor: 0x4f5c55,
+    ambientIntensity: 2.2,
+    keyLightColor: 0xffffff,
+    keyLightIntensity: 1.8,
+  };
+}
+
 export function createTerrainMeshData(mapData: MapData, options: TerrainMeshOptions = {}): TerrainMeshData {
   const xSamples = createSampleAxis(mapData.width, options.maxSamples ?? defaultMaxSamples);
   const ySamples = createSampleAxis(mapData.height, options.maxSamples ?? defaultMaxSamples);
@@ -66,6 +102,7 @@ export function createTerrainMeshData(mapData: MapData, options: TerrainMeshOpti
   const terrainWidth = options.terrainWidth ?? defaultTerrainWidth;
   const terrainDepth = terrainWidth * (mapData.height / Math.max(1, mapData.width));
   const heightScale = options.heightScale ?? defaultHeightScale;
+  const layerId = options.layerId ?? "surface";
   const positions = new Float32Array(vertexCount * 3);
   const colors = new Float32Array(vertexCount * 3);
   const indices = new Uint32Array(Math.max(0, (columns - 1) * (rows - 1) * 6));
@@ -81,7 +118,7 @@ export function createTerrainMeshData(mapData: MapData, options: TerrainMeshOpti
       positions[positionIndex + 1] = normalizedHeight(mapData.heightMap[tileIndex]) * heightScale;
       positions[positionIndex + 2] = tileToWorldZ(tileY, mapData.height, terrainDepth);
 
-      const color = terrainPalette[mapData.terrainMap[tileIndex]] ?? terrainPalette.grass;
+      const color = terrainColorForLayer(mapData.terrainMap[tileIndex], layerId);
       colors[positionIndex] = color[0];
       colors[positionIndex + 1] = color[1];
       colors[positionIndex + 2] = color[2];
@@ -115,6 +152,7 @@ export function createTerrainMeshData(mapData: MapData, options: TerrainMeshOpti
     terrainWidth,
     terrainDepth,
     heightScale,
+    layerId,
   };
 }
 
@@ -124,8 +162,18 @@ export function entityToTerrainPosition(
   meshData: TerrainMeshData,
   lift = 0.7,
 ): TerrainPoint3D {
-  const tileX = clampInteger(entity.x, 0, mapData.width - 1);
-  const tileY = clampInteger(entity.y, 0, mapData.height - 1);
+  return tileToTerrainPosition(mapData, entity.x, entity.y, meshData, lift);
+}
+
+export function tileToTerrainPosition(
+  mapData: MapData,
+  x: number,
+  y: number,
+  meshData: TerrainMeshData,
+  lift = 0,
+): TerrainPoint3D {
+  const tileX = clampInteger(x, 0, mapData.width - 1);
+  const tileY = clampInteger(y, 0, mapData.height - 1);
   const height = mapData.heightMap[tileY * mapData.width + tileX];
 
   return {
@@ -141,6 +189,13 @@ export function heightDiffMovementReadiness(mapData: MapData, entity: WorldEntit
   const tileHeight = normalizedHeight(mapData.heightMap[tileY * mapData.width + tileX]);
   const jumpHeight = Math.max(0, entity.jumpHeight);
   const maxSlope = Math.max(0, entity.maxSlope);
+  const movementEntity = {
+    ...entity,
+    x: tileX,
+    y: tileY,
+    jumpHeight,
+    maxSlope,
+  };
   let checkedDirections = 0;
   let reachableDirections = 0;
   let maxAdjacentHeightDiff = 0;
@@ -155,7 +210,7 @@ export function heightDiffMovementReadiness(mapData: MapData, entity: WorldEntit
     const nextHeight = normalizedHeight(mapData.heightMap[nextY * mapData.width + nextX]);
     const heightDiff = Math.abs(nextHeight - tileHeight);
     maxAdjacentHeightDiff = Math.max(maxAdjacentHeightDiff, heightDiff);
-    if (canTraverseHeightDiff({ ...entity, jumpHeight, maxSlope }, heightDiff)) {
+    if (canMoveBetween(mapData, movementEntity, tileX, tileY, nextX, nextY)) {
       reachableDirections += 1;
     }
   }
@@ -211,6 +266,30 @@ function normalizedHeight(value: number | undefined): number {
     return 0;
   }
   return Math.max(0, Math.min(1, value ?? 0));
+}
+
+function terrainColorForLayer(terrain: TerrainType | undefined, layerId: string): [number, number, number] {
+  const baseColor = terrainPalette[terrain ?? "grass"] ?? terrainPalette.grass;
+  if (!isCaveLayer(layerId)) {
+    return baseColor;
+  }
+  if (terrain === "cave-floor" || terrain === "cave-wall") {
+    return baseColor;
+  }
+  const caveTint: [number, number, number] = [0.25, 0.22, 0.19];
+  return [
+    roundColor(baseColor[0] * 0.42 + caveTint[0] * 0.58),
+    roundColor(baseColor[1] * 0.42 + caveTint[1] * 0.58),
+    roundColor(baseColor[2] * 0.42 + caveTint[2] * 0.58),
+  ];
+}
+
+function isCaveLayer(layerId: string): boolean {
+  return layerId.toLowerCase().includes("cave");
+}
+
+function roundColor(value: number): number {
+  return Math.max(0, Math.min(1, Math.round(value * 1000) / 1000));
 }
 
 function clampInteger(value: number, min: number, max: number): number {

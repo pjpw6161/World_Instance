@@ -27,6 +27,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "mountainRatio",
             "caveAreaRatio",
             "blockedRatio",
+            "blockedTileRatio",
             "reachableAreaRatio",
             "treeCount",
             "roadLength",
@@ -44,6 +45,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "caveCreatureCount",
             "reachableAreaRatio",
             "portalCount",
+            "blockedTileRatio",
             "npcCount",
             "creatureDensity",
             "livingDensity"
@@ -57,6 +59,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "mountainRatio",
             "caveAreaRatio",
             "blockedRatio",
+            "blockedTileRatio",
             "reachableAreaRatio",
             "treeDensity",
             "roadDensity",
@@ -119,7 +122,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         body.put("from", Math.max(0, request.page()) * request.size());
         body.put("size", request.size());
         body.put("query", Map.of("bool", buildBoolQuery(request)));
-        body.put("sort", List.of(Map.of("updatedAt", Map.of("order", "desc")), "_score"));
+        body.put("sort", searchSort(request));
 
         JsonNode root = requestJson("POST", "/" + settings.indexName() + "/_search", body);
         JsonNode hitsNode = root.get("hits");
@@ -194,6 +197,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         aggregations.put("caveCreatureCounts", rangeAgg("livingStats.caveCreatureCount", countRanges()));
         aggregations.put("reachableAreaRatios", rangeAgg("livingStats.reachableAreaRatio", ratioRanges()));
         aggregations.put("portalCounts", rangeAgg("livingStats.portalCount", portalCountRanges()));
+        aggregations.put("blockedTileRatios", rangeAgg("livingStats.blockedTileRatio", ratioRanges()));
         body.put("size", 0);
         body.put("aggs", aggregations);
 
@@ -211,7 +215,8 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 buckets(aggs, "surfaceCreatureCounts"),
                 buckets(aggs, "caveCreatureCounts"),
                 buckets(aggs, "reachableAreaRatios"),
-                buckets(aggs, "portalCounts")
+                buckets(aggs, "portalCounts"),
+                buckets(aggs, "blockedTileRatios")
         );
     }
 
@@ -259,10 +264,12 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         properties.put("projectId", Map.of("type", "keyword"));
         properties.put("versionId", Map.of("type", "keyword"));
         properties.put("ownerId", Map.of("type", "keyword"));
+        properties.put("ownerNickname", Map.of("type", "keyword"));
         properties.put("title", Map.of("type", "text", "fields", Map.of("keyword", Map.of("type", "keyword"))));
         properties.put("description", Map.of("type", "text"));
         properties.put("mapType", Map.of("type", "keyword"));
         properties.put("mapHash", Map.of("type", "keyword"));
+        properties.put("thumbnailUrl", Map.of("type", "keyword", "index", false));
         properties.put("engineVersion", Map.of("type", "keyword"));
         properties.put("seed", Map.of("type", "long"));
         properties.put("width", Map.of("type", "integer"));
@@ -320,6 +327,29 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             bool.put("must", List.of(Map.of("match_all", Map.of())));
         }
         return bool;
+    }
+
+    private List<Object> searchSort(MapSearchRequest request) {
+        return switch (request.sort()) {
+            case "popular" -> List.of(
+                    "_score",
+                    Map.of("mapDna.livingDensity", Map.of("order", "desc", "missing", "_last")),
+                    Map.of("updatedAt", Map.of("order", "desc"))
+            );
+            case "mostCreatures" -> List.of(
+                    Map.of("livingStats.creatureCount", Map.of("order", "desc", "missing", "_last")),
+                    Map.of("updatedAt", Map.of("order", "desc"))
+            );
+            case "mostExplorable" -> List.of(
+                    Map.of("livingStats.reachableAreaRatio", Map.of("order", "desc", "missing", "_last")),
+                    Map.of("livingStats.portalCount", Map.of("order", "desc", "missing", "_last")),
+                    Map.of("updatedAt", Map.of("order", "desc"))
+            );
+            default -> List.of(
+                    Map.of("updatedAt", Map.of("order", "desc")),
+                    "_score"
+            );
+        };
     }
 
     private void term(List<Object> filter, String field, String value) {
@@ -395,10 +425,12 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         source.put("projectId", document.projectId().toString());
         source.put("versionId", document.versionId().toString());
         source.put("ownerId", document.ownerId().toString());
+        source.put("ownerNickname", document.ownerNickname());
         source.put("title", document.title());
         source.put("description", document.description());
         source.put("mapType", document.mapType());
         source.put("mapHash", document.mapHash());
+        source.put("thumbnailUrl", document.thumbnailUrl());
         source.put("engineVersion", document.engineVersion());
         source.put("seed", document.seed());
         source.put("width", document.width());
@@ -422,10 +454,12 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 UUID.fromString(textAt(source, "projectId", "")),
                 UUID.fromString(textAt(source, "versionId", "")),
                 UUID.fromString(textAt(source, "ownerId", "")),
+                textAt(source, "ownerNickname", ""),
                 textAt(source, "title", ""),
                 textAt(source, "description", ""),
                 textAt(source, "mapType", "mixed"),
                 textAt(source, "mapHash", ""),
+                nullableTextAt(source, "thumbnailUrl"),
                 textAt(source, "engineVersion", ""),
                 longAt(source, "seed", 0),
                 intAt(source, "width", 0),
@@ -558,6 +592,11 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
     private String textAt(JsonNode node, String field, String fallback) {
         JsonNode value = objectAt(node, field);
         return value == null || value.isNull() ? fallback : value.asText(fallback);
+    }
+
+    private String nullableTextAt(JsonNode node, String field) {
+        JsonNode value = objectAt(node, field);
+        return value == null || value.isNull() || value.asText().isBlank() ? null : value.asText();
     }
 
     private int intAt(JsonNode node, String field, int fallback) {

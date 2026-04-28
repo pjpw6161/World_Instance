@@ -14,6 +14,7 @@ public record MapSearchFacetsResponse(
         List<FacetBucketResponse> surfaceCreatureCounts,
         List<FacetBucketResponse> caveCreatureCounts,
         List<FacetBucketResponse> reachableAreaRatios,
-        List<FacetBucketResponse> portalCounts
+        List<FacetBucketResponse> portalCounts,
+        List<FacetBucketResponse> blockedTileRatios
 ) {
 }

@@ -40,6 +40,7 @@ public class NoopMapSearchIndexClient implements MapSearchIndexClient {
                 List.of(),
                 List.of(),
                 List.of(),
+                List.of(),
                 List.of()
         );
     }

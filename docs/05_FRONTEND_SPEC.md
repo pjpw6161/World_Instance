@@ -57,9 +57,27 @@ Renders heightMap as grayscale or gradient.
 
 Renders selected row/column elevation profile.
 
-### 3D Terrain View later
+### 3D Terrain View
 
-Consumes the same MapData. Do not create a separate 3D-only map format.
+Consumes the same `MapData` and `WorldInstance` entity state. Do not create a separate 3D-only map format.
+
+MVP v0.1 behavior:
+
+- uses `heightMap` for terrain elevation
+- uses `terrainMap` for vertex colors
+- renders player and entities as simple spheres
+- derives entity z position from `heightMap`, not from a separate 3D simulation
+- supports 2D/3D switching in `/world/:id`
+- supports orbit, top, and side camera presets
+- filters entities by the current `layerId`
+- treats surface and cave as separate visual scenes backed by the same MapData grid
+
+Performance limits:
+
+- terrain mesh is sampled to a maximum of 96 points per axis by default
+- large maps are simplified for preview rather than rendered as full-resolution geometry
+- entity and marker meshes are simple primitives only
+- no physics engine, skeletal animation, texture streaming, or complex model loading in MVP
 
 ## World Instance view
 
@@ -69,7 +87,7 @@ MVP:
 - entities move as dots/circles
 - collisionMap blocks movement
 - costMap influences entity pathfinding
-- portalMap can transition to cave layer later
+- portalList transitions between surface and cave layers
 - save/restore state through API
 
 ## Frontend boundaries

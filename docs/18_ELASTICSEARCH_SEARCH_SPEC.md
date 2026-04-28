@@ -37,9 +37,15 @@ Example document:
     "mountainRatio": 0.13,
     "treeCount": 1840,
     "roadLength": 291,
-    "caveAreaRatio": 0.08,
+    "caveAreaRatio": 0.08
+  },
+  "livingStats": {
     "creatureCount": 30,
-    "reachableAreaRatio": 0.72
+    "surfaceCreatureCount": 22,
+    "caveCreatureCount": 8,
+    "reachableAreaRatio": 0.72,
+    "portalCount": 3,
+    "blockedTileRatio": 0.21
   },
   "tags": ["forest", "island", "large", "roads"],
   "mapDnaVector": [0.61, 0.39, 0.27, 0.13, 0.08, 0.21],
@@ -57,8 +63,10 @@ Do not accept raw Elasticsearch Query DSL.
   "features": ["trees", "roads"],
   "terrainAlgorithm": "noise-island",
   "minForestRatio": 0.2,
-  "width": 512,
-  "sort": "newest"
+  "minCreatureCount": 10,
+  "minReachableAreaRatio": 0.7,
+  "minWidth": 128,
+  "maxWidth": 512
 }
 ```
 
@@ -69,8 +77,13 @@ Return counts for:
 - mapType
 - features
 - algorithms
-- width/height buckets
-- stat ranges later
+- livingActivity
+- creatureCount ranges
+- surfaceCreatureCount ranges
+- caveCreatureCount ranges
+- reachableAreaRatio ranges
+- portalCount ranges
+- blockedTileRatio ranges
 
 ## Similar maps
 

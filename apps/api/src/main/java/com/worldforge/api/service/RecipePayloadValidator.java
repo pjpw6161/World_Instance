@@ -43,6 +43,7 @@ public class RecipePayloadValidator {
             "mountainRatio",
             "caveAreaRatio",
             "blockedRatio",
+            "blockedTileRatio",
             "reachableAreaRatio"
     );
     private static final Set<String> COUNT_STATS = Set.of(
@@ -58,6 +59,7 @@ public class RecipePayloadValidator {
     );
     private static final Set<String> LIVING_RATIO_STATS = Set.of(
             "reachableAreaRatio",
+            "blockedTileRatio",
             "livingDensity",
             "creatureDensity"
     );

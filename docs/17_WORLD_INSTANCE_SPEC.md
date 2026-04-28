@@ -11,7 +11,8 @@ Turn a generated map into a personal living world where player/entity dots move 
 - player dot moves on 2D map using keyboard
 - simple entities wander
 - collisionMap blocks movement
-- costMap influences movement/pathfinding later
+- costMap influences movement/pathfinding
+- heightMap, jumpHeight, and maxSlope block steep movement
 - state can be saved and loaded
 
 ## Non-goals
@@ -31,14 +32,16 @@ Turn a generated map into a personal living world where player/entity dots move 
 - cave wall blocked
 - road low cost
 - forest higher cost
-- cave entrance portal later
+- cave entrance portal transitions layerId
 
-3D later:
+Height-aware movement:
 
 - z comes from heightMap
-- height difference controls passability
-- entity jumpHeight controls allowable height change
-- renderer may animate a simple jump arc
+- movement checks the height difference between the current tile and target tile
+- movement is blocked when heightDiff is greater than the entity jumpHeight
+- movement is blocked when heightDiff is greater than the entity maxSlope
+- pathfinding uses the same collision, cost, object, portal, jumpHeight, and maxSlope rules as direct player movement
+- 2D movement and 3D movement-readiness indicators use the same rule function
 
 ## Data model
 
@@ -59,6 +62,9 @@ EntityState
 - layerId
 - x, y, z
 - homeX, homeY
+- movementCostMultiplier
+- jumpHeight
+- maxSlope
 - state
 - behavior
 - metadataJson

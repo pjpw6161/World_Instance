@@ -6,6 +6,8 @@ import {
   createTerrainMeshData,
   entityToTerrainPosition,
   heightDiffMovementReadiness,
+  terrainLayerSceneStyle,
+  tileToTerrainPosition,
   type Terrain3DViewMode,
   type TerrainMeshData,
 } from "./terrain3d";
@@ -46,19 +48,26 @@ export function WorldTerrain3D({ mapData, entities, activeLayerId, viewMode }: W
     let resizeObserver: ResizeObserver | null = null;
 
     try {
-      const meshData = createTerrainMeshData(mapData);
+      const meshData = createTerrainMeshData(mapData, { layerId: activeLayerId });
+      const sceneStyle = terrainLayerSceneStyle(activeLayerId);
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xe6ede8);
+      scene.background = new THREE.Color(sceneStyle.backgroundColor);
+      scene.fog = new THREE.Fog(sceneStyle.fogColor, meshData.terrainWidth * 0.9, meshData.terrainWidth * 2.4);
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
       const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-      const ambientLight = new THREE.HemisphereLight(0xffffff, 0x4f5c55, 2.2);
-      const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+      const ambientLight = new THREE.HemisphereLight(
+        sceneStyle.ambientSkyColor,
+        sceneStyle.ambientGroundColor,
+        sceneStyle.ambientIntensity,
+      );
+      const keyLight = new THREE.DirectionalLight(sceneStyle.keyLightColor, sceneStyle.keyLightIntensity);
       keyLight.position.set(36, 48, 32);
       scene.add(ambientLight, keyLight);
       scene.add(createTerrainMesh(meshData));
+      scene.add(createStaticMarkerGroup(mapData, activeLayerId, meshData));
 
       const entityGroup = new THREE.Group();
       scene.add(entityGroup);
@@ -110,7 +119,7 @@ export function WorldTerrain3D({ mapData, entities, activeLayerId, viewMode }: W
       refs.renderer.dispose();
       refs.renderer.domElement.remove();
     };
-  }, [mapData]);
+  }, [activeLayerId, mapData]);
 
   useEffect(() => {
     const refs = sceneRef.current;
@@ -205,6 +214,60 @@ function updateEntityGroup(
     entityGroup.add(createMovementRing(mapData, entity, meshData, position, radius));
     entityGroup.add(sphere);
   }
+}
+
+function createStaticMarkerGroup(mapData: MapData, activeLayerId: string, meshData: TerrainMeshData): THREE.Group {
+  const markerGroup = new THREE.Group();
+
+  for (const portal of mapData.portalList) {
+    if (portal.fromLayerId !== activeLayerId) {
+      continue;
+    }
+    const position = tileToTerrainPosition(mapData, portal.x, portal.y, meshData, 0.42);
+    const geometry = new THREE.TorusGeometry(0.74, 0.08, 8, 24);
+    const material = new THREE.MeshBasicMaterial({
+      color: portal.toLayerId === "cave" ? 0xb96df2 : 0x66c8ff,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const marker = new THREE.Mesh(geometry, material);
+    marker.rotation.x = Math.PI / 2;
+    marker.position.set(position.x, position.y, position.z);
+    markerGroup.add(marker);
+  }
+
+  for (const object of mapData.objectList) {
+    if (object.layerId !== activeLayerId) {
+      continue;
+    }
+    const position = tileToTerrainPosition(mapData, object.x, object.y, meshData, object.type === "cave-entrance" ? 0.44 : 0.24);
+    const marker = createObjectMarker(object.type);
+    marker.position.set(position.x, position.y, position.z);
+    markerGroup.add(marker);
+  }
+
+  return markerGroup;
+}
+
+function createObjectMarker(type: string): THREE.Mesh {
+  if (type === "cave-entrance") {
+    const geometry = new THREE.SphereGeometry(0.52, 12, 8);
+    const material = new THREE.MeshBasicMaterial({ color: 0x7d4aa2 });
+    return new THREE.Mesh(geometry, material);
+  }
+  if (type === "tree") {
+    const geometry = new THREE.ConeGeometry(0.46, 0.96, 8);
+    const material = new THREE.MeshStandardMaterial({ color: 0x163f2a, roughness: 0.8 });
+    return new THREE.Mesh(geometry, material);
+  }
+  if (type === "rock") {
+    const geometry = new THREE.DodecahedronGeometry(0.42);
+    const material = new THREE.MeshStandardMaterial({ color: 0x4c514f, roughness: 0.9 });
+    return new THREE.Mesh(geometry, material);
+  }
+  const geometry = new THREE.BoxGeometry(0.52, 0.52, 0.52);
+  const material = new THREE.MeshStandardMaterial({ color: 0x7f6342, roughness: 0.8 });
+  return new THREE.Mesh(geometry, material);
 }
 
 function createMovementRing(

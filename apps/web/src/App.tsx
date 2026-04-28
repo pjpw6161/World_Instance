@@ -1,8 +1,8 @@
 import './App.css'
 import { AuthPage } from './pages/AuthPage'
 import { EditorPage } from './pages/EditorPage'
+import { GalleryPage } from './pages/GalleryPage'
 import { MapLibraryPage } from './pages/MapLibraryPage'
-import { SearchPage } from './pages/SearchPage'
 import { WorldPage } from './pages/WorldPage'
 
 function App() {
@@ -18,8 +18,13 @@ function App() {
     return <MapLibraryPage />;
   }
 
-  if (window.location.pathname === "/search") {
-    return <SearchPage />;
+  if (window.location.pathname === "/search" || window.location.pathname === "/gallery" || window.location.pathname === "/explore") {
+    return <GalleryPage />;
+  }
+
+  const galleryMatch = window.location.pathname.match(/^\/(?:gallery|explore)\/([^/]+)$/);
+  if (galleryMatch?.[1]) {
+    return <GalleryPage detailProjectId={decodeURIComponent(galleryMatch[1])} />;
   }
 
   const worldMatch = window.location.pathname.match(/^\/world\/([^/]+)$/);

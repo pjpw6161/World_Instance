@@ -31,6 +31,7 @@ public class MapSearchRequestParser {
     private static final Set<String> ROAD_ALGORITHMS = Set.of("astar", "simple-path");
     private static final Set<String> OBJECT_ALGORITHMS = Set.of("biome-density", "scatter");
     private static final Set<String> LIVING_ACTIVITIES = Set.of("quiet", "inhabited", "dense");
+    private static final Set<String> SORTS = Set.of("newest", "popular", "mostCreatures", "mostExplorable");
     private static final List<String> STAT_FIELDS = List.of(
             "waterRatio",
             "landRatio",
@@ -38,6 +39,7 @@ public class MapSearchRequestParser {
             "mountainRatio",
             "caveAreaRatio",
             "blockedRatio",
+            "blockedTileRatio",
             "reachableAreaRatio",
             "treeCount",
             "roadLength",
@@ -55,6 +57,7 @@ public class MapSearchRequestParser {
             "caveCreatureCount",
             "reachableAreaRatio",
             "portalCount",
+            "blockedTileRatio",
             "livingDensity",
             "creatureDensity"
     );
@@ -67,6 +70,7 @@ public class MapSearchRequestParser {
             "roadAlgorithm",
             "objectPlacementAlgorithm",
             "livingActivity",
+            "sort",
             "minWidth",
             "maxWidth",
             "minHeight",
@@ -85,6 +89,8 @@ public class MapSearchRequestParser {
             "maxCaveAreaRatio",
             "minBlockedRatio",
             "maxBlockedRatio",
+            "minBlockedTileRatio",
+            "maxBlockedTileRatio",
             "minReachableAreaRatio",
             "maxReachableAreaRatio",
             "minTreeCount",
@@ -128,6 +134,7 @@ public class MapSearchRequestParser {
         String roadAlgorithm = optionalEnum(params, "roadAlgorithm", ROAD_ALGORITHMS, details);
         String objectPlacementAlgorithm = optionalEnum(params, "objectPlacementAlgorithm", OBJECT_ALGORITHMS, details);
         String livingActivity = optionalEnum(params, "livingActivity", LIVING_ACTIVITIES, details);
+        String sort = optionalEnum(params, "sort", SORTS, details);
         Integer minWidth = optionalInteger(params, "minWidth", details);
         Integer maxWidth = optionalInteger(params, "maxWidth", details);
         Integer minHeight = optionalInteger(params, "minHeight", details);
@@ -165,6 +172,7 @@ public class MapSearchRequestParser {
                 maxHeight,
                 stats,
                 livingStats,
+                sort == null ? "newest" : sort,
                 page,
                 size
         );

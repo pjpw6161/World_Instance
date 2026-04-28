@@ -532,6 +532,334 @@ input:focus-visible {
   padding: 5px 8px;
 }
 
+.gallery-shell {
+  padding: 24px;
+}
+
+.gallery-filter-panel {
+  background: #ffffff;
+  border: 1px solid #d9e0d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.gallery-filter-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
+.gallery-filter-row.primary {
+  grid-template-columns: minmax(220px, 2fr) minmax(140px, 1fr) minmax(150px, 1fr) auto auto;
+}
+
+.gallery-filter-row.compact {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+
+.gallery-filter-row .generate-button,
+.gallery-filter-row .secondary-button {
+  align-self: end;
+  min-height: 36px;
+  min-width: 92px;
+  width: auto;
+}
+
+.gallery-filter-group {
+  border: 1px solid #e1e8df;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+}
+
+.gallery-filter-group legend {
+  color: #587064;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+
+.gallery-checkbox-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(96px, 1fr));
+}
+
+.gallery-layout {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.gallery-layout:has(.gallery-detail) {
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+}
+
+.gallery-facets,
+.gallery-detail {
+  background: #fbfcfa;
+  border: 1px solid #d9e0d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.facet-section {
+  border-bottom: 1px solid #e1e8df;
+  padding-bottom: 10px;
+}
+
+.facet-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.facet-section h2 {
+  color: #2f3c37;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.facet-section p {
+  color: #7a8b82;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.facet-section ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.facet-section li {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.facet-section span {
+  color: #4b5d54;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facet-section strong {
+  background: #eef3ed;
+  border: 1px solid #d8e2d7;
+  border-radius: 999px;
+  color: #426144;
+  font-size: 12px;
+  min-width: 34px;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.gallery-results {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.gallery-result-toolbar {
+  align-items: center;
+  color: #587064;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.gallery-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.gallery-card {
+  background: #ffffff;
+  border: 1px solid #d9e0d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 160px minmax(0, 1fr) 128px;
+  padding: 14px;
+}
+
+.gallery-thumbnail {
+  align-items: center;
+  aspect-ratio: 4 / 3;
+  background: #e7eef4;
+  border: 1px solid #c8d8df;
+  border-radius: 6px;
+  display: grid;
+  justify-items: center;
+  overflow: hidden;
+}
+
+.gallery-thumbnail img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.gallery-thumbnail div {
+  color: #1b4d70;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 10px;
+  text-align: center;
+}
+
+.gallery-thumbnail strong {
+  font-size: 16px;
+  text-transform: capitalize;
+}
+
+.gallery-thumbnail span {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.gallery-card-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.gallery-card h2,
+.gallery-detail-panel h2 {
+  color: #1f2b27;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0 0 5px;
+}
+
+.gallery-card p,
+.gallery-detail-panel p {
+  color: #587064;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.gallery-card-meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(86px, 1fr));
+  margin: 0;
+}
+
+.gallery-card-meta.stacked {
+  grid-template-columns: 1fr;
+}
+
+.gallery-card-meta div {
+  background: #eef3ed;
+  border: 1px solid #d8e2d7;
+  border-radius: 6px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.gallery-card-meta dt {
+  color: #587064;
+  font-size: 10px;
+  font-weight: 800;
+  margin: 0 0 3px;
+  text-transform: uppercase;
+}
+
+.gallery-card-meta dd {
+  color: #1f2b27;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.gallery-chip-row,
+.gallery-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gallery-chip-row span,
+.gallery-stat-row span {
+  background: #f3f6f1;
+  border: 1px solid #d8e2d7;
+  border-radius: 999px;
+  color: #426144;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.gallery-chip-row.muted {
+  color: #7a8b82;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gallery-stat-row.vertical {
+  display: grid;
+}
+
+.gallery-card-actions {
+  align-content: center;
+  display: grid;
+  gap: 8px;
+}
+
+.gallery-card-actions .generate-button,
+.gallery-card-actions .secondary-button {
+  min-height: 38px;
+  width: 100%;
+}
+
+.text-button {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.gallery-state {
+  background: #fbfcfa;
+  border: 1px solid #d9e0d8;
+  border-radius: 8px;
+  color: #587064;
+  font-weight: 800;
+  min-height: 96px;
+  padding: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.gallery-detail-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .stat-label {
   color: #587064;
   display: block;
@@ -595,8 +923,18 @@ input:focus-visible {
   .project-fields,
   .project-actions,
   .map-list-item,
-  .search-form {
+  .search-form,
+  .gallery-filter-row,
+  .gallery-filter-row.primary,
+  .gallery-filter-row.compact,
+  .gallery-layout,
+  .gallery-layout:has(.gallery-detail),
+  .gallery-card {
     grid-template-columns: 1fr;
+  }
+
+  .gallery-checkbox-grid {
+    grid-template-columns: repeat(3, minmax(96px, 1fr));
   }
 
   .stats-grid {
@@ -627,18 +965,21 @@ input:focus-visible {
 
   .control-panel,
   .map-workspace,
-  .stats-panel,
-  .project-panel,
-  .auth-panel,
-  .library-shell,
-  .search-shell {
+    .stats-panel,
+    .project-panel,
+    .auth-panel,
+    .library-shell,
+    .search-shell,
+    .gallery-shell {
     padding: 14px;
   }
 
   .feature-grid,
+  .gallery-checkbox-grid,
   .two-col,
   .seed-inputs,
-  .stats-grid {
+  .stats-grid,
+  .gallery-card-meta {
     grid-template-columns: 1fr;
   }
 

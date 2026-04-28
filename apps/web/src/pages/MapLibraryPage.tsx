@@ -83,8 +83,8 @@ export function MapLibraryPage() {
           <a className="text-link" href="/editor">
             Editor
           </a>
-          <a className="text-link" href="/search">
-            Search
+          <a className="text-link" href="/gallery">
+            Gallery
           </a>
           <AuthStatus />
         </nav>
