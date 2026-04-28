@@ -13,9 +13,9 @@ Users choose:
 - enabled features: mountains, forests, trees, roads, caves, rivers, villages
 - algorithm choices: terrain, cave, road, tree/object placement
 - generation parameters: water level, mountain level, forest density, cave density, road complexity
-- view mode: 2D terrain, height map, side view, later 3D terrain
+- view mode: 2D terrain, height map, side view, and basic 3D terrain preview
 
-The app generates a deterministic map in the browser, lets the user save/publish it, then allows the user to create a **World Instance** where simple entities move around the generated map.
+The app generates a deterministic map in the browser. The API stores map projects, versions, publish state, and **World Instance** snapshots where simple entities move around the generated map.
 
 ## Target architecture
 
@@ -24,7 +24,7 @@ Browser
   React + Vite + TypeScript
   C++/WebAssembly map engine
   Canvas 2D renderer
-  3D renderer later
+  Basic 3D terrain preview
   Local draft save
   World Instance simulation client-side
 
@@ -45,7 +45,7 @@ Elasticsearch
   Public map search
   Feature/algorithm/stat filters
   Facets/aggregations
-  Similar map search via Map DNA vector later
+  Similar map search via Map DNA/stat distance
 ```
 
 ## Non-goals for MVP
@@ -54,48 +54,25 @@ Elasticsearch
 - no server-authoritative monster simulation
 - no combat system
 - no complex art pipeline
-- no full 3D terrain at the start
+- no production-grade 3D game renderer
 - no Elasticsearch as the primary database
 - no Java server-side map generation for MVP
 
-## Recommended first milestone
+## Current MVP v0.1 scope
 
-Create the skeleton:
-
-```txt
-apps/web                 React/Vite frontend
-apps/api                 Spring Boot API
-packages/shared          TypeScript contracts for frontend/WASM wrapper
-engine/wasm-engine       C++/WebAssembly engine
-infra/docker-compose.yml PostgreSQL + Elasticsearch
-```
-
-Then implement in this order:
-
-1. shared recipe/map contracts
-2. WASM engine skeleton and deterministic generation contract
-3. 2D/height/side view editor
-4. Spring Boot map/version/world-instance API
-5. PostgreSQL persistence
-6. Elasticsearch public map indexing/search
-7. World Instance movement in browser
-8. 3D terrain view later
-
-## Phase 0 scaffold
-
-This repository currently contains the Phase 0 project skeleton:
+This repository currently contains:
 
 ```txt
-apps/web                 React + Vite + TypeScript frontend scaffold
-apps/api                 Spring Boot + Gradle API scaffold
-packages/shared          TypeScript shared package scaffold
-engine/wasm-engine       C++/Emscripten engine skeleton
-infra/docker-compose.yml PostgreSQL + Elasticsearch development placeholders
+apps/web                 React/Vite frontend with editor, 2D/height/side views, World Instance view, and basic 3D preview
+apps/api                 Spring Boot API for maps, versions, world instances, public search, and admin reindex
+packages/shared          TypeScript contracts and validation helpers
+engine/wasm-engine       C++/WebAssembly deterministic map engine plus TypeScript wrapper
+infra/docker-compose.yml PostgreSQL + Elasticsearch for local development
 ```
 
-Phase 0 intentionally does not implement map generation, World Instance behavior, Elasticsearch search, authentication, or 3D rendering.
+Map generation must be produced by the browser WASM artifact for release usage. The TypeScript deterministic generator exists only as a clearly labeled development/test fallback.
 
-## Local commands
+## Clean Clone Setup
 
 Install JavaScript workspaces:
 
@@ -103,34 +80,78 @@ Install JavaScript workspaces:
 npm install
 ```
 
-Run common checks:
+Start PostgreSQL and Elasticsearch:
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d postgres elasticsearch
+docker compose -f infra/docker-compose.yml ps
+```
+
+Local schema setup is handled by Spring/Hibernate with `WORLD_FORGE_JPA_DDL_AUTO=update` by default. There is no migration tool yet; use `WORLD_FORGE_JPA_DDL_AUTO=validate` only after the MVP schema already exists.
+
+Build the TypeScript packages and the WASM wrapper:
 
 ```powershell
 npm run shared:build
-npm run web:build
-npm run api:test
-npm run infra:config
+npm run wasm-wrapper:build
 ```
 
-Run the frontend:
+Build the real browser WASM artifact. Emscripten must be installed and activated so `em++` is on `PATH`.
+
+```powershell
+npm run wasm:build
+```
+
+The WASM build emits `engine/wasm-engine/dist/world_forge_engine.js` and `.wasm`, then copies them to `apps/web/public/wasm/` for Vite to serve. These generated artifacts are intentionally ignored by git and must be rebuilt after a clean clone.
+
+Run the API:
+
+```powershell
+cd apps/api
+.\gradlew.bat bootRun
+```
+
+Run the frontend in another terminal:
 
 ```powershell
 npm run web:dev
 ```
 
-Run the API:
+Open the Vite URL, then use `/editor`. If the WASM artifact is missing in development, the editor labels the engine as `Fallback`; production builds fail generation instead of silently using the fallback.
+
+## Local Checks
+
+Run common checks from the repository root:
 
 ```powershell
+npm run shared:build
+npm run shared:test
+npm run wasm-wrapper:build
+npm run wasm-wrapper:test
+npm run web:build
+npm run web:test
 npm run api:test
+npm run infra:config
+```
+
+Run the complete verification bundle:
+
+```powershell
+npm run verify
+```
+
+Rebuild the search index from PostgreSQL public maps:
+
+```powershell
+$env:WORLD_FORGE_ADMIN_ENABLED="true"
 cd apps/api
 .\gradlew.bat bootRun
 ```
 
-Check the WASM engine tooling:
+Then call:
 
 ```powershell
-emcc --version
-powershell -ExecutionPolicy Bypass -File engine/wasm-engine/scripts/build-wasm.ps1
+Invoke-RestMethod -Method Post http://localhost:8080/api/admin/search/maps/reindex
 ```
 
 ## Codex workflow

@@ -22,7 +22,10 @@ public record MapSearchDocument(
         String caveAlgorithm,
         String roadAlgorithm,
         String objectPlacementAlgorithm,
+        String livingActivity,
         Map<String, Double> stats,
+        Map<String, Double> livingStats,
+        Map<String, Double> mapDna,
         Instant createdAt,
         Instant updatedAt
 ) {

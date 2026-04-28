@@ -54,6 +54,8 @@ class WorldInstanceApiIntegrationTests {
                 .andExpect(jsonPath("$.worldInstance.name").value("Playable Island"))
                 .andExpect(jsonPath("$.worldInstance.worldTime").value(7))
                 .andExpect(jsonPath("$.entities[0].entityKey").value("player"))
+                .andExpect(jsonPath("$.entities[0].movementCostMultiplier").value(1.0))
+                .andExpect(jsonPath("$.entities[0].jumpHeight").value(1.0))
                 .andReturnJson();
 
         UUID worldInstanceId = UUID.fromString(created.get("worldInstance").get("id").asText());
@@ -203,6 +205,8 @@ class WorldInstanceApiIntegrationTests {
         entity.put("z", null);
         entity.put("homeX", null);
         entity.put("homeY", null);
+        entity.put("movementCostMultiplier", type.equals("player") ? 1.0 : 1.4);
+        entity.put("jumpHeight", type.equals("player") ? 1.0 : 0.25);
         entity.put("state", "idle");
         entity.put("behavior", type.equals("player") ? "manual" : "wander");
         entity.put("metadataJson", Map.of());

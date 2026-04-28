@@ -2,6 +2,8 @@ package com.worldforge.api.search;
 
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 public class MapSearchService {
     private final MapSearchIndexClient indexClient;
@@ -12,6 +14,10 @@ public class MapSearchService {
 
     public MapSearchResponse search(MapSearchRequest request) {
         return indexClient.search(request);
+    }
+
+    public MapSearchResponse similar(UUID projectId, int size) {
+        return indexClient.similar(projectId, size);
     }
 
     public MapSearchFacetsResponse facets() {

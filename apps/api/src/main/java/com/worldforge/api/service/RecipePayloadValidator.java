@@ -49,7 +49,17 @@ public class RecipePayloadValidator {
             "treeCount",
             "roadLength",
             "villageCount",
+            "creatureCount",
+            "npcCount",
             "generationTimeMs"
+    );
+    private static final Set<String> LIVING_RATIO_STATS = Set.of(
+            "livingDensity",
+            "creatureDensity"
+    );
+    private static final Set<String> LIVING_COUNT_STATS = Set.of(
+            "creatureCount",
+            "npcCount"
     );
 
     public RecipePayload validate(JsonNode recipe, JsonNode stats, String mapHash, String thumbnailUrl) {
@@ -142,6 +152,29 @@ public class RecipePayloadValidator {
             JsonNode value = stats.get(stat);
             if (value != null && (!value.isNumber() || value.doubleValue() < 0)) {
                 details.add("stats." + stat + " must be a non-negative number");
+            }
+        }
+        validateLivingStats(stats.get("livingStats"), details);
+    }
+
+    private void validateLivingStats(JsonNode livingStats, List<String> details) {
+        if (livingStats == null || livingStats.isNull()) {
+            return;
+        }
+        if (!livingStats.isObject()) {
+            details.add("stats.livingStats must be an object");
+            return;
+        }
+        for (String stat : LIVING_RATIO_STATS) {
+            JsonNode value = livingStats.get(stat);
+            if (value != null && (!value.isNumber() || !Double.isFinite(value.doubleValue()) || value.doubleValue() < 0.0 || value.doubleValue() > 1.0)) {
+                details.add("stats.livingStats." + stat + " must be between 0.0 and 1.0");
+            }
+        }
+        for (String stat : LIVING_COUNT_STATS) {
+            JsonNode value = livingStats.get(stat);
+            if (value != null && (!value.isNumber() || value.doubleValue() < 0)) {
+                details.add("stats.livingStats." + stat + " must be a non-negative number");
             }
         }
     }

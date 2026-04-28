@@ -1,6 +1,7 @@
 package com.worldforge.api.repository;
 
 import com.worldforge.api.domain.MapProject;
+import com.worldforge.api.domain.MapVisibility;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -8,4 +9,6 @@ import java.util.UUID;
 
 public interface MapProjectRepository extends JpaRepository<MapProject, UUID> {
     List<MapProject> findByOwnerIdOrderByUpdatedAtDesc(UUID ownerId);
+
+    List<MapProject> findByVisibilityOrderByUpdatedAtDesc(MapVisibility visibility);
 }

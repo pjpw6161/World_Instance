@@ -14,6 +14,9 @@ out/
 # C++ / WASM outputs
 engine/wasm-engine/build/
 engine/wasm-engine/dist/
+apps/web/public/wasm/world_forge_engine.js
+apps/web/public/wasm/world_forge_engine.wasm
+apps/web/public/wasm/*.map
 
 # Local environment
 .env

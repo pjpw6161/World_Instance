@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { validateGenerationRecipe, type GenerationRecipe, type MapData, type ViewMode } from "@world-forge/shared";
-import type { WorldForgeWasmEngine } from "@world-forge/wasm-engine";
 import { ControlPanel } from "../components/ControlPanel";
 import { MapViewport } from "../components/MapViewport";
 import { StatsPanel } from "../components/StatsPanel";
-import { createEditorEngine } from "../editor/engineAdapter";
+import { createEditorEngine, type EditorEngine, type EditorEngineRuntime } from "../editor/engineAdapter";
 import { createInitialRecipe } from "../editor/editorState";
+
+const initialEngineRuntime: EditorEngineRuntime = {
+  kind: "wasm",
+  label: "WASM",
+  detail: "/wasm/world_forge_engine.wasm",
+};
 
 export function EditorPage() {
   const [recipe, setRecipe] = useState<GenerationRecipe>(() => createInitialRecipe());
@@ -13,10 +18,13 @@ export function EditorPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("terrain-2d");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
-  const engineRef = useRef<WorldForgeWasmEngine | null>(null);
+  const [engineRuntime, setEngineRuntime] = useState<EditorEngineRuntime>(initialEngineRuntime);
+  const engineRef = useRef<EditorEngine | null>(null);
 
   const getEngine = useCallback(() => {
-    engineRef.current ??= createEditorEngine();
+    engineRef.current ??= createEditorEngine({
+      onRuntimeChange: setEngineRuntime,
+    });
     return engineRef.current;
   }, []);
 
@@ -32,8 +40,10 @@ export function EditorPage() {
       setStatus("generating");
       setError(null);
       try {
-        const generated = await getEngine().generate(validation.value);
+        const engine = getEngine();
+        const generated = await engine.generate(validation.value);
         setMapData(generated);
+        setEngineRuntime(engine.runtime());
         setStatus("ready");
       } catch (unknownError) {
         setError(unknownError instanceof Error ? unknownError.message : "Generation failed");
@@ -53,6 +63,11 @@ export function EditorPage() {
         <div>
           <p>World Forge</p>
           <h1>Editor</h1>
+        </div>
+        <div className={`engine-runtime ${engineRuntime.kind}`}>
+          <span>Engine</span>
+          <strong>{engineRuntime.label}</strong>
+          <small>{engineRuntime.detail}</small>
         </div>
       </header>
 

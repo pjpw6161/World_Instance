@@ -1,4 +1,4 @@
-import type { GenerationRecipe, TerrainType } from "@world-forge/shared";
+import type { GenerationRecipe, Portal, TerrainType } from "@world-forge/shared";
 import type { WorldForgeLowLevelModule } from "./types";
 
 const FNV_OFFSET = 14695981039346656037n;
@@ -112,6 +112,7 @@ function generateReferenceMapJson(recipe: GenerationRecipe): string {
   }
 
   const tileCount = Math.max(1, recipe.width * recipe.height);
+  const portalList = recipe.features.caves ? cavePortals(tiles, recipe.width, recipe.height) : [];
   return JSON.stringify({
     width: recipe.width,
     height: recipe.height,
@@ -120,7 +121,7 @@ function generateReferenceMapJson(recipe: GenerationRecipe): string {
     objectList: [],
     collisionMap: tiles.map((tile) => tile.blocked),
     costMap: tiles.map((tile) => tile.cost),
-    portalList: [],
+    portalList,
     stats: {
       waterRatio: round4(waterCount / tileCount),
       landRatio: round4(landCount / tileCount),
@@ -135,6 +136,70 @@ function generateReferenceMapJson(recipe: GenerationRecipe): string {
     },
     mapHash: hashHex(fnv1a(hashInput)),
   });
+}
+
+function cavePortals(tiles: readonly TileData[], width: number, height: number): Portal[] {
+  const portal = findWalkableTile(tiles, width, height, Math.floor(width / 2), Math.floor(height / 2));
+  if (!portal) {
+    return [];
+  }
+  return [
+    {
+      id: "surface-cave-entrance",
+      fromLayerId: "surface",
+      toLayerId: "cave",
+      x: portal.x,
+      y: portal.y,
+      targetX: portal.x,
+      targetY: portal.y,
+    },
+    {
+      id: "cave-surface-exit",
+      fromLayerId: "cave",
+      toLayerId: "surface",
+      x: portal.x,
+      y: portal.y,
+      targetX: portal.x,
+      targetY: portal.y,
+    },
+  ];
+}
+
+function findWalkableTile(
+  tiles: readonly TileData[],
+  width: number,
+  height: number,
+  preferredX: number,
+  preferredY: number,
+): { x: number; y: number } | null {
+  const startX = clampInteger(preferredX, 0, width - 1);
+  const startY = clampInteger(preferredY, 0, height - 1);
+  if (isWalkableAt(tiles, width, height, startX, startY)) {
+    return { x: startX, y: startY };
+  }
+
+  const maxRadius = Math.max(width, height);
+  for (let radius = 1; radius < maxRadius; radius += 1) {
+    for (let y = startY - radius; y <= startY + radius; y += 1) {
+      for (let x = startX - radius; x <= startX + radius; x += 1) {
+        if (Math.abs(x - startX) !== radius && Math.abs(y - startY) !== radius) {
+          continue;
+        }
+        if (isWalkableAt(tiles, width, height, x, y)) {
+          return { x, y };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function isWalkableAt(tiles: readonly TileData[], width: number, height: number, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= width || y >= height) {
+    return false;
+  }
+  return tiles[y * width + x]?.blocked === false;
 }
 
 function buildRecipeKey(recipe: GenerationRecipe): string {
@@ -266,6 +331,13 @@ function boolNumber(value: boolean): string {
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
 function round4(value: number): number {

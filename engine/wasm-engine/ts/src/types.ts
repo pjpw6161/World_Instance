@@ -37,8 +37,19 @@ export interface WorldForgeLowLevelModule {
   dispose?: () => void;
 }
 
-export type WorldForgeModuleFactory = () => Promise<WorldForgeLowLevelModule>;
+export interface WorldForgeModuleOptions {
+  locateFile?: (path: string, prefix: string) => string;
+}
+
+export type WorldForgeModuleFactory = (options?: WorldForgeModuleOptions) => Promise<WorldForgeLowLevelModule>;
+
+export interface WorldForgeArtifactModuleFactoryOptions {
+  moduleUrl?: string;
+  wasmUrl?: string;
+}
 
 export interface WorldForgeWasmEngineOptions {
   moduleFactory?: WorldForgeModuleFactory;
+  moduleUrl?: string;
+  wasmUrl?: string;
 }

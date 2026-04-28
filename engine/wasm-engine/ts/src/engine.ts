@@ -1,5 +1,6 @@
 import { assertValidGenerationRecipe, type GenerationRecipe, type MapData } from "@world-forge/shared";
 import type {
+  WorldForgeArtifactModuleFactoryOptions,
   WasmEngineStatus,
   WorldForgeLowLevelModule,
   WorldForgeModuleFactory,
@@ -7,11 +8,17 @@ import type {
   WorldForgeWasmEngineOptions,
 } from "./types";
 
+const defaultModuleUrl = "/wasm/world_forge_engine.js";
+const defaultWasmUrl = "/wasm/world_forge_engine.wasm";
+
 export function createWorldForgeWasmEngine(options: WorldForgeWasmEngineOptions = {}): WorldForgeWasmEngine {
   let status: WasmEngineStatus = "unloaded";
   let moduleInstance: WorldForgeLowLevelModule | null = null;
   let version: string | null = null;
-  const moduleFactory = options.moduleFactory ?? loadDefaultModule;
+  const moduleFactory = options.moduleFactory ?? createArtifactModuleFactory({
+    moduleUrl: options.moduleUrl,
+    wasmUrl: options.wasmUrl,
+  });
 
   return {
     status: () => status,
@@ -80,11 +87,30 @@ export function createWorldForgeWasmEngine(options: WorldForgeWasmEngineOptions 
   };
 }
 
-async function loadDefaultModule(): Promise<WorldForgeLowLevelModule> {
-  const modulePath = "../../dist/world_forge_engine.js";
-  const moduleFactory = await import(/* @vite-ignore */ modulePath);
-  const createModule = moduleFactory.default as WorldForgeModuleFactory;
-  return createModule();
+export function createArtifactModuleFactory(
+  options: WorldForgeArtifactModuleFactoryOptions = {},
+): WorldForgeModuleFactory {
+  const moduleUrl = options.moduleUrl ?? defaultModuleUrl;
+  const wasmUrl = options.wasmUrl ?? defaultWasmUrl;
+
+  return async () => {
+    const moduleFactory = await importArtifactModule(moduleUrl);
+    const createModule = moduleFactory.default as WorldForgeModuleFactory;
+    return createModule({
+      locateFile: (path) => {
+        if (path.endsWith(".wasm")) {
+          return wasmUrl;
+        }
+        return path;
+      },
+    });
+  };
+}
+
+async function importArtifactModule(moduleUrl: string): Promise<{ default: unknown }> {
+  // Keep Vite from transforming files emitted into apps/web/public/wasm.
+  const nativeImport = new Function("url", "return import(url)") as (url: string) => Promise<{ default: unknown }>;
+  return nativeImport(moduleUrl);
 }
 
 function parseMapData(payload: string): MapData {

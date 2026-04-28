@@ -133,6 +133,8 @@ export interface EntityStateDto {
   z?: number | null;
   homeX?: number | null;
   homeY?: number | null;
+  movementCostMultiplier?: number | null;
+  jumpHeight?: number | null;
   state: string;
   behavior: string;
   metadataJson: Record<string, unknown>;

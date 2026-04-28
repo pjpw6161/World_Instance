@@ -57,6 +57,12 @@ public class EntityState {
     @Column
     private Integer homeY;
 
+    @Column
+    private Double movementCostMultiplier;
+
+    @Column
+    private Double jumpHeight;
+
     @Column(nullable = false)
     private String state;
 
@@ -85,6 +91,8 @@ public class EntityState {
             Double z,
             Integer homeX,
             Integer homeY,
+            Double movementCostMultiplier,
+            Double jumpHeight,
             String state,
             String behavior,
             String metadataJson
@@ -98,6 +106,8 @@ public class EntityState {
         this.z = z;
         this.homeX = homeX;
         this.homeY = homeY;
+        this.movementCostMultiplier = movementCostMultiplier;
+        this.jumpHeight = jumpHeight;
         this.state = state;
         this.behavior = behavior;
         this.metadataJson = metadataJson;
@@ -153,6 +163,14 @@ public class EntityState {
 
     public Integer getHomeY() {
         return homeY;
+    }
+
+    public Double getMovementCostMultiplier() {
+        return movementCostMultiplier;
+    }
+
+    public Double getJumpHeight() {
+        return jumpHeight;
     }
 
     public String getState() {

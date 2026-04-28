@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { validateGenerationRecipe, type MapData } from "@world-forge/shared";
-import type { WorldForgeWasmEngine } from "@world-forge/wasm-engine";
-import { createEditorEngine } from "../editor/engineAdapter";
+import { createEditorEngine, type EditorEngine } from "../editor/engineAdapter";
 import { WorldCanvas } from "../world/WorldCanvas";
+import { assertGeneratedMapMatchesStoredHash } from "../world/mapIntegrity";
 import { fetchMapVersion, fetchWorldState, saveWorldState } from "../world/worldApi";
+import type { Terrain3DViewMode } from "../world/terrain3d";
 import {
+  activeLayerForEntities,
   createInitialWorldEntities,
   fromEntityStateDto,
   movePlayer,
@@ -18,6 +20,8 @@ interface WorldPageProps {
 }
 
 type WorldStatus = "loading" | "ready" | "saving" | "error";
+type WorldViewMode = "terrain-2d" | "terrain-3d";
+const WorldTerrain3D = lazy(() => import("../world/WorldTerrain3D").then((module) => ({ default: module.WorldTerrain3D })));
 
 export function WorldPage({ worldInstanceId }: WorldPageProps) {
   const [mapData, setMapData] = useState<MapData | null>(null);
@@ -27,7 +31,9 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
   const [mapHash, setMapHash] = useState("");
   const [status, setStatus] = useState<WorldStatus>("loading");
   const [error, setError] = useState<string | null>(null);
-  const engineRef = useRef<WorldForgeWasmEngine | null>(null);
+  const [worldViewMode, setWorldViewMode] = useState<WorldViewMode>("terrain-2d");
+  const [terrain3DViewMode, setTerrain3DViewMode] = useState<Terrain3DViewMode>("orbit");
+  const engineRef = useRef<EditorEngine | null>(null);
 
   const getEngine = useCallback(() => {
     engineRef.current ??= createEditorEngine();
@@ -45,6 +51,7 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
         throw new Error(recipe.issues[0]?.message ?? "Invalid map recipe");
       }
       const generatedMap = await getEngine().generate(recipe.value);
+      assertGeneratedMapMatchesStoredHash(generatedMap, mapVersion.mapHash);
       const loadedEntities =
         state.entities.length > 0
           ? state.entities.map(fromEntityStateDto)
@@ -114,14 +121,16 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
         return;
       }
       event.preventDefault();
-      setEntities((currentEntities) => movePlayer(mapData, currentEntities, direction.dx, direction.dy));
+      setEntities((currentEntities) => movePlayer(mapData, currentEntities, direction.dx, direction.dy, worldTime));
       setWorldTime((currentTime) => currentTime + 1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mapData, status]);
+  }, [mapData, status, worldTime]);
 
   const player = entities.find((entity) => entity.entityType === "player");
+  const activeLayerId = activeLayerForEntities(entities);
+  const lastMoveCost = player?.metadataJson.lastMoveCost;
 
   return (
     <main className="world-shell">
@@ -145,9 +154,46 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
 
       <div className="world-layout">
         <section className="world-stage" aria-label="World view">
-          <div className="canvas-frame world-frame">
-            {mapData ? <WorldCanvas mapData={mapData} entities={entities} /> : <div className="empty-preview">Loading world</div>}
+          <div className="world-view-toolbar" aria-label="World view controls">
+            <div className="view-tabs world-mode-tabs">
+              <button type="button" className={worldViewMode === "terrain-2d" ? "active" : ""} onClick={() => setWorldViewMode("terrain-2d")}>
+                2D
+              </button>
+              <button type="button" className={worldViewMode === "terrain-3d" ? "active" : ""} onClick={() => setWorldViewMode("terrain-3d")}>
+                3D
+              </button>
+            </div>
+            {worldViewMode === "terrain-3d" ? (
+              <div className="view-tabs world-camera-tabs" aria-label="3D camera">
+                <button type="button" className={terrain3DViewMode === "orbit" ? "active" : ""} onClick={() => setTerrain3DViewMode("orbit")}>
+                  Orbit
+                </button>
+                <button type="button" className={terrain3DViewMode === "top" ? "active" : ""} onClick={() => setTerrain3DViewMode("top")}>
+                  Top
+                </button>
+                <button type="button" className={terrain3DViewMode === "side" ? "active" : ""} onClick={() => setTerrain3DViewMode("side")}>
+                  Side
+                </button>
+              </div>
+            ) : null}
           </div>
+          {mapData ? (
+            worldViewMode === "terrain-3d" ? (
+              <div className="world-3d-frame">
+                <Suspense fallback={<div className="empty-preview">Loading 3D view</div>}>
+                  <WorldTerrain3D mapData={mapData} entities={entities} activeLayerId={activeLayerId} viewMode={terrain3DViewMode} />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="canvas-frame world-frame">
+                <WorldCanvas mapData={mapData} entities={entities} activeLayerId={activeLayerId} />
+              </div>
+            )
+          ) : (
+            <div className="canvas-frame world-frame">
+              <div className="empty-preview">Loading world</div>
+            </div>
+          )}
           {error ? <p className="error-line">{error}</p> : null}
         </section>
 
@@ -163,6 +209,18 @@ export function WorldPage({ worldInstanceId }: WorldPageProps) {
           <div className="world-state-row">
             <span>Player</span>
             <strong>{player ? `${player.x}, ${player.y}` : "none"}</strong>
+          </div>
+          <div className="world-state-row">
+            <span>Layer</span>
+            <strong>{activeLayerId}</strong>
+          </div>
+          <div className="world-state-row">
+            <span>Move Cost</span>
+            <strong>{typeof lastMoveCost === "number" ? lastMoveCost : "-"}</strong>
+          </div>
+          <div className="world-state-row">
+            <span>Jump</span>
+            <strong>{player ? player.jumpHeight.toFixed(2) : "-"}</strong>
           </div>
           <div className="world-state-row">
             <span>Entities</span>

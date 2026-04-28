@@ -83,6 +83,27 @@ describe("WorldForgeWasmEngine wrapper", () => {
     expect(map.terrainMap).not.toContain("mountain");
   });
 
+  it("emits cave transition portals when caves are enabled", async () => {
+    const engine = testEngine();
+    const map = await engine.generate(
+      recipeWith({
+        width: 64,
+        height: 64,
+        features: {
+          ...defaultRecipe.features,
+          caves: true,
+        },
+      }),
+    );
+
+    expect(map.portalList).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fromLayerId: "surface", toLayerId: "cave" }),
+        expect.objectContaining({ fromLayerId: "cave", toLayerId: "surface" }),
+      ]),
+    );
+  });
+
   it("rejects invalid recipes before calling the low-level module", async () => {
     const engine = testEngine();
 

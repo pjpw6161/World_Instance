@@ -12,6 +12,8 @@
   background: #fbfcfa;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 14px 24px;
 }
 
@@ -27,6 +29,42 @@
   font-size: 24px;
   line-height: 1;
   margin: 0;
+}
+
+.engine-runtime {
+  border: 1px solid #c7d2c8;
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  max-width: min(360px, 48vw);
+  padding: 8px 10px;
+}
+
+.engine-runtime span {
+  color: #587064;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.engine-runtime strong {
+  color: #1f2b27;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.engine-runtime small {
+  color: #587064;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.engine-runtime.fallback {
+  background: #fff8e7;
+  border-color: #e3c36d;
 }
 
 .editor-layout {
@@ -343,7 +381,14 @@ input:focus-visible {
 
 @media (max-width: 560px) {
   .editor-header {
+    align-items: stretch;
+    flex-direction: column;
     padding: 12px 16px;
+  }
+
+  .engine-runtime {
+    max-width: none;
+    width: 100%;
   }
 
   .control-panel,
@@ -437,14 +482,71 @@ input:focus-visible {
   padding: 18px;
 }
 
+.world-view-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.world-mode-tabs {
+  grid-template-columns: repeat(2, minmax(72px, auto));
+}
+
+.world-camera-tabs {
+  grid-template-columns: repeat(3, minmax(68px, auto));
+}
+
 .world-frame {
-  min-height: calc(100vh - 110px);
+  min-height: calc(100vh - 154px);
 }
 
 .world-canvas {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.world-3d-frame {
+  background: #e6ede8;
+  min-height: calc(100vh - 154px);
+  overflow: hidden;
+  position: relative;
+}
+
+.world-3d-frame .empty-preview {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.world-terrain-3d {
+  height: 100%;
+  min-height: inherit;
+  position: relative;
+  width: 100%;
+}
+
+.world-terrain-3d canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.world-3d-error {
+  align-items: center;
+  background: #fff8e7;
+  color: #8c4b16;
+  display: flex;
+  font-weight: 800;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: absolute;
+  text-align: center;
 }
 
 .world-sidebar {
@@ -527,7 +629,21 @@ input:focus-visible {
     padding: 14px;
   }
 
+  .world-view-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .world-mode-tabs,
+  .world-camera-tabs {
+    width: 100%;
+  }
+
   .world-frame {
+    min-height: 360px;
+  }
+
+  .world-3d-frame {
     min-height: 360px;
   }
 

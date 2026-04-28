@@ -29,6 +29,15 @@ engine/wasm-engine/dist/world_forge_engine.js
 engine/wasm-engine/dist/world_forge_engine.wasm
 ```
 
+The script also copies browser-loadable artifacts to:
+
+```txt
+apps/web/public/wasm/world_forge_engine.js
+apps/web/public/wasm/world_forge_engine.wasm
+```
+
+`apps/web` loads `/wasm/world_forge_engine.js` first. The TypeScript reference module is only a development fallback when the WASM artifact is missing or fails to load.
+
 If Emscripten is not installed or `em++` is not on `PATH`, the build script exits with a clear message.
 
 ## Wrapper Checks

@@ -11,11 +11,13 @@ public record MapSearchRequest(
         String caveAlgorithm,
         String roadAlgorithm,
         String objectPlacementAlgorithm,
+        String livingActivity,
         Integer minWidth,
         Integer maxWidth,
         Integer minHeight,
         Integer maxHeight,
         Map<String, NumericRange> stats,
+        Map<String, NumericRange> livingStats,
         int page,
         int size
 ) {

@@ -1,9 +1,11 @@
 export { createDeterministicDevModule } from "./devReferenceModule";
-export { createWorldForgeWasmEngine } from "./engine";
+export { createArtifactModuleFactory, createWorldForgeWasmEngine } from "./engine";
 export type {
   WasmEngineStatus,
+  WorldForgeArtifactModuleFactoryOptions,
   WorldForgeLowLevelModule,
   WorldForgeModuleFactory,
+  WorldForgeModuleOptions,
   WorldForgeWasmEngine,
   WorldForgeWasmEngineOptions,
 } from "./types";

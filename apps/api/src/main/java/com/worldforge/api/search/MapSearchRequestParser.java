@@ -30,6 +30,7 @@ public class MapSearchRequestParser {
     private static final Set<String> CAVE_ALGORITHMS = Set.of("cellular-automata", "random-walk");
     private static final Set<String> ROAD_ALGORITHMS = Set.of("astar", "simple-path");
     private static final Set<String> OBJECT_ALGORITHMS = Set.of("biome-density", "scatter");
+    private static final Set<String> LIVING_ACTIVITIES = Set.of("quiet", "inhabited", "dense");
     private static final List<String> STAT_FIELDS = List.of(
             "waterRatio",
             "landRatio",
@@ -41,7 +42,13 @@ public class MapSearchRequestParser {
             "treeCount",
             "roadLength",
             "villageCount",
+            "creatureCount",
+            "npcCount",
             "generationTimeMs"
+    );
+    private static final List<String> LIVING_STAT_FIELDS = List.of(
+            "livingDensity",
+            "creatureDensity"
     );
     private static final Set<String> ALLOWED_PARAMS = Set.of(
             "keyword",
@@ -51,6 +58,7 @@ public class MapSearchRequestParser {
             "caveAlgorithm",
             "roadAlgorithm",
             "objectPlacementAlgorithm",
+            "livingActivity",
             "minWidth",
             "maxWidth",
             "minHeight",
@@ -77,9 +85,18 @@ public class MapSearchRequestParser {
             "maxRoadLength",
             "minVillageCount",
             "maxVillageCount",
+            "minCreatureCount",
+            "maxCreatureCount",
+            "minNpcCount",
+            "maxNpcCount",
+            "minLivingDensity",
+            "maxLivingDensity",
+            "minCreatureDensity",
+            "maxCreatureDensity",
             "minGenerationTimeMs",
             "maxGenerationTimeMs"
     );
+    private static final Set<String> SIMILAR_ALLOWED_PARAMS = Set.of("size");
 
     public MapSearchRequest parse(MultiValueMap<String, String> params) {
         List<String> details = new ArrayList<>();
@@ -96,6 +113,7 @@ public class MapSearchRequestParser {
         String caveAlgorithm = optionalEnum(params, "caveAlgorithm", CAVE_ALGORITHMS, details);
         String roadAlgorithm = optionalEnum(params, "roadAlgorithm", ROAD_ALGORITHMS, details);
         String objectPlacementAlgorithm = optionalEnum(params, "objectPlacementAlgorithm", OBJECT_ALGORITHMS, details);
+        String livingActivity = optionalEnum(params, "livingActivity", LIVING_ACTIVITIES, details);
         Integer minWidth = optionalInteger(params, "minWidth", details);
         Integer maxWidth = optionalInteger(params, "maxWidth", details);
         Integer minHeight = optionalInteger(params, "minHeight", details);
@@ -103,11 +121,15 @@ public class MapSearchRequestParser {
         int page = boundedInteger(params, "page", 0, 10_000, 0, details);
         int size = boundedInteger(params, "size", 1, MAX_SIZE, DEFAULT_SIZE, details);
         Map<String, NumericRange> stats = statRanges(params, details);
+        Map<String, NumericRange> livingStats = livingStatRanges(params, details);
 
         validateMinMax("width", minWidth, maxWidth, details);
         validateMinMax("height", minHeight, maxHeight, details);
         for (Map.Entry<String, NumericRange> entry : stats.entrySet()) {
             validateMinMax(entry.getKey(), entry.getValue().min(), entry.getValue().max(), details);
+        }
+        for (Map.Entry<String, NumericRange> entry : livingStats.entrySet()) {
+            validateMinMax("livingStats." + entry.getKey(), entry.getValue().min(), entry.getValue().max(), details);
         }
 
         if (!details.isEmpty()) {
@@ -122,14 +144,30 @@ public class MapSearchRequestParser {
                 caveAlgorithm,
                 roadAlgorithm,
                 objectPlacementAlgorithm,
+                livingActivity,
                 minWidth,
                 maxWidth,
                 minHeight,
                 maxHeight,
                 stats,
+                livingStats,
                 page,
                 size
         );
+    }
+
+    public int parseSimilarSize(MultiValueMap<String, String> params) {
+        List<String> details = new ArrayList<>();
+        for (String key : params.keySet()) {
+            if (!SIMILAR_ALLOWED_PARAMS.contains(key)) {
+                details.add(key + " is not a supported similar maps parameter");
+            }
+        }
+        int size = boundedInteger(params, "size", 1, MAX_SIZE, 10, details);
+        if (!details.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_SIMILAR_MAPS_REQUEST", "Similar maps request validation failed", details);
+        }
+        return size;
     }
 
     private List<String> featureList(MultiValueMap<String, String> params, List<String> details) {
@@ -155,6 +193,18 @@ public class MapSearchRequestParser {
     private Map<String, NumericRange> statRanges(MultiValueMap<String, String> params, List<String> details) {
         Map<String, NumericRange> ranges = new LinkedHashMap<>();
         for (String stat : STAT_FIELDS) {
+            Double min = optionalDouble(params, "min" + upperFirst(stat), details);
+            Double max = optionalDouble(params, "max" + upperFirst(stat), details);
+            if (min != null || max != null) {
+                ranges.put(stat, new NumericRange(min, max));
+            }
+        }
+        return ranges;
+    }
+
+    private Map<String, NumericRange> livingStatRanges(MultiValueMap<String, String> params, List<String> details) {
+        Map<String, NumericRange> ranges = new LinkedHashMap<>();
+        for (String stat : LIVING_STAT_FIELDS) {
             Double min = optionalDouble(params, "min" + upperFirst(stat), details);
             Double max = optionalDouble(params, "max" + upperFirst(stat), details);
             if (min != null || max != null) {

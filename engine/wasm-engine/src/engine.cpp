@@ -50,6 +50,11 @@ struct Stats {
     int blocked_count = 0;
 };
 
+struct Point {
+    int x = -1;
+    int y = -1;
+};
+
 std::uint64_t splitmix64(std::uint64_t value) {
     value += 0x9e3779b97f4a7c15ull;
     value = (value ^ (value >> 30u)) * 0xbf58476d1ce4e5b9ull;
@@ -190,6 +195,37 @@ std::string bool_json(bool value) {
     return value ? "true" : "false";
 }
 
+Point find_walkable_tile(const std::vector<TileData>& tiles, int width, int height, int preferred_x, int preferred_y) {
+    const int start_x = std::max(0, std::min(width - 1, preferred_x));
+    const int start_y = std::max(0, std::min(height - 1, preferred_y));
+    const auto is_walkable_at = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+            return false;
+        }
+        return !tiles[static_cast<std::size_t>(y * width + x)].blocked;
+    };
+
+    if (is_walkable_at(start_x, start_y)) {
+        return Point{start_x, start_y};
+    }
+
+    const int max_radius = std::max(width, height);
+    for (int radius = 1; radius < max_radius; ++radius) {
+        for (int y = start_y - radius; y <= start_y + radius; ++y) {
+            for (int x = start_x - radius; x <= start_x + radius; ++x) {
+                if (std::abs(x - start_x) != radius && std::abs(y - start_y) != radius) {
+                    continue;
+                }
+                if (is_walkable_at(x, y)) {
+                    return Point{x, y};
+                }
+            }
+        }
+    }
+
+    return Point{};
+}
+
 std::string build_recipe_key(
     const std::string& recipe_engine_version,
     std::uint32_t seed,
@@ -221,7 +257,7 @@ std::string build_recipe_key(
 
 } // namespace
 
-const char* engine_version() {
+std::string engine_version() {
     return "0.1.0";
 }
 
@@ -356,7 +392,22 @@ std::string generate_map_json(
     }
     json << "],";
 
-    json << "\"portalList\":[],";
+    json << "\"portalList\":";
+    const Point cave_portal = features.caves
+        ? find_walkable_tile(tiles, width, height, width / 2, height / 2)
+        : Point{};
+    if (cave_portal.x >= 0 && cave_portal.y >= 0) {
+        json << "[";
+        json << "{\"id\":\"surface-cave-entrance\",\"fromLayerId\":\"surface\",\"toLayerId\":\"cave\",";
+        json << "\"x\":" << cave_portal.x << ",\"y\":" << cave_portal.y << ",";
+        json << "\"targetX\":" << cave_portal.x << ",\"targetY\":" << cave_portal.y << "},";
+        json << "{\"id\":\"cave-surface-exit\",\"fromLayerId\":\"cave\",\"toLayerId\":\"surface\",";
+        json << "\"x\":" << cave_portal.x << ",\"y\":" << cave_portal.y << ",";
+        json << "\"targetX\":" << cave_portal.x << ",\"targetY\":" << cave_portal.y << "}";
+        json << "],";
+    } else {
+        json << "[],";
+    }
     json << "\"stats\":{";
     json << "\"waterRatio\":" << static_cast<double>(stats.water_count) / tile_count << ",";
     json << "\"landRatio\":" << static_cast<double>(stats.land_count) / tile_count << ",";

@@ -122,6 +122,8 @@ public class WorldInstanceService {
                         entity.z(),
                         entity.homeX(),
                         entity.homeY(),
+                        entity.movementCostMultiplier(),
+                        entity.jumpHeight(),
                         entity.state().trim(),
                         entity.behavior().trim(),
                         toJsonString(entity.metadataJson())
@@ -151,6 +153,8 @@ public class WorldInstanceService {
             if (entity.z() != null && !Double.isFinite(entity.z())) {
                 details.add("entities." + key + ".z must be finite");
             }
+            validateOptionalFiniteNonNegative("entities." + key + ".movementCostMultiplier", entity.movementCostMultiplier(), details);
+            validateOptionalFiniteNonNegative("entities." + key + ".jumpHeight", entity.jumpHeight(), details);
             JsonNode metadata = entity.metadataJson();
             if (metadata != null && !metadata.isObject()) {
                 details.add("entities." + key + ".metadataJson must be an object");
@@ -168,6 +172,12 @@ public class WorldInstanceService {
         }
         if (y < 0 || y >= height) {
             details.add(prefix + ".y must be between 0 and " + (height - 1));
+        }
+    }
+
+    private void validateOptionalFiniteNonNegative(String field, Double value, List<String> details) {
+        if (value != null && (!Double.isFinite(value) || value < 0)) {
+            details.add(field + " must be a finite non-negative number");
         }
     }
 
@@ -225,6 +235,8 @@ public class WorldInstanceService {
                 entityState.getZ(),
                 entityState.getHomeX(),
                 entityState.getHomeY(),
+                entityState.getMovementCostMultiplier(),
+                entityState.getJumpHeight(),
                 entityState.getState(),
                 entityState.getBehavior(),
                 toJsonNode(entityState.getMetadataJson())

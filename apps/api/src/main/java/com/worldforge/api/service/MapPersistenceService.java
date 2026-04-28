@@ -4,6 +4,7 @@ import com.worldforge.api.common.ApiException;
 import com.worldforge.api.domain.DevUser;
 import com.worldforge.api.domain.MapProject;
 import com.worldforge.api.domain.MapVersion;
+import com.worldforge.api.domain.MapVisibility;
 import com.worldforge.api.dto.CreateMapRequest;
 import com.worldforge.api.dto.CreateMapVersionRequest;
 import com.worldforge.api.dto.MapProjectResponse;
@@ -85,13 +86,18 @@ public class MapPersistenceService {
     public MapProjectResponse updateMap(UUID projectId, UpdateMapProjectRequest request) {
         DevUser owner = devUserProvider.currentUser();
         MapProject project = findOwnedProject(projectId, owner);
+        MapVisibility previousVisibility = project.getVisibility();
         String title = request.title() == null ? null : request.title().trim();
         if (title != null && title.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "title must not be blank");
         }
         project.updateDetails(title, normalizeOptionalDescription(request.description()), request.visibility());
         MapVersion currentVersion = currentVersion(project);
-        mapSearchProjectionService.syncProject(project, currentVersion);
+        if (previousVisibility == MapVisibility.PUBLIC && project.getVisibility() != MapVisibility.PUBLIC) {
+            mapSearchProjectionService.removeProjectImmediately(project.getId());
+        } else if (project.getVisibility() == MapVisibility.PUBLIC || previousVisibility == MapVisibility.PUBLIC) {
+            mapSearchProjectionService.syncProject(project, currentVersion);
+        }
         return toProjectResponse(project, currentVersion);
     }
 
@@ -107,7 +113,9 @@ public class MapPersistenceService {
         );
         MapVersion version = saveVersion(project, payload);
         project.setCurrentVersionId(version.getId());
-        mapSearchProjectionService.syncProject(project, version);
+        if (project.getVisibility() == MapVisibility.PUBLIC) {
+            mapSearchProjectionService.syncProject(project, version);
+        }
         return toVersionResponse(version);
     }
 

@@ -20,11 +20,18 @@ public record MapSearchResultResponse(
         String caveAlgorithm,
         String roadAlgorithm,
         String objectPlacementAlgorithm,
+        String livingActivity,
         Map<String, Double> stats,
+        Map<String, Double> livingStats,
+        Double similarityScore,
         Instant createdAt,
         Instant updatedAt
 ) {
     public static MapSearchResultResponse fromDocument(MapSearchDocument document) {
+        return fromDocument(document, null);
+    }
+
+    public static MapSearchResultResponse fromDocument(MapSearchDocument document, Double similarityScore) {
         return new MapSearchResultResponse(
                 document.projectId(),
                 document.versionId(),
@@ -40,7 +47,10 @@ public record MapSearchResultResponse(
                 document.caveAlgorithm(),
                 document.roadAlgorithm(),
                 document.objectPlacementAlgorithm(),
+                document.livingActivity(),
                 document.stats(),
+                document.livingStats(),
+                similarityScore,
                 document.createdAt(),
                 document.updatedAt()
         );

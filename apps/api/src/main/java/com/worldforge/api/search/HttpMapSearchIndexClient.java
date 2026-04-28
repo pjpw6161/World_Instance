@@ -31,7 +31,31 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             "treeCount",
             "roadLength",
             "villageCount",
+            "creatureCount",
+            "npcCount",
             "generationTimeMs"
+    );
+    private static final List<String> LIVING_STAT_FIELDS = List.of(
+            "creatureCount",
+            "npcCount",
+            "creatureDensity",
+            "livingDensity"
+    );
+    private static final List<String> DNA_FIELDS = List.of(
+            "width",
+            "height",
+            "waterRatio",
+            "landRatio",
+            "forestRatio",
+            "mountainRatio",
+            "caveAreaRatio",
+            "blockedRatio",
+            "reachableAreaRatio",
+            "treeDensity",
+            "roadDensity",
+            "villageDensity",
+            "creatureDensity",
+            "livingDensity"
     );
 
     private final ElasticsearchSettings settings;
@@ -66,6 +90,19 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
     }
 
     @Override
+    public void replaceAll(List<MapSearchDocument> documents) {
+        HttpResponse<String> deleteResponse = request("DELETE", "/" + settings.indexName(), null);
+        if (deleteResponse.statusCode() != 404) {
+            ensureSuccess(deleteResponse);
+        }
+        indexReady.set(false);
+        ensureIndex();
+        for (MapSearchDocument document : documents) {
+            index(document);
+        }
+    }
+
+    @Override
     public MapSearchResponse search(MapSearchRequest request) {
         ensureIndex();
         Map<String, Object> body = new LinkedHashMap<>();
@@ -91,6 +128,46 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
     }
 
     @Override
+    public MapSearchResponse similar(UUID projectId, int size) {
+        ensureIndex();
+        MapSearchDocument target = findByProjectId(projectId);
+        if (target == null || target.mapDna().isEmpty()) {
+            return new MapSearchResponse(List.of(), 0, 0, size);
+        }
+
+        Map<String, Object> bool = new LinkedHashMap<>();
+        bool.put("must", List.of(Map.of("match_all", Map.of())));
+        bool.put("must_not", List.of(Map.of("term", Map.of("projectId", target.projectId().toString()))));
+
+        Map<String, Object> script = new LinkedHashMap<>();
+        script.put("source", similarityScript());
+        script.put("params", target.mapDna());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("size", size);
+        body.put("query", Map.of("script_score", Map.of(
+                "query", Map.of("bool", bool),
+                "script", script
+        )));
+        body.put("sort", List.of("_score", Map.of("updatedAt", Map.of("order", "desc"))));
+
+        JsonNode root = requestJson("POST", "/" + settings.indexName() + "/_search", body);
+        JsonNode hitsNode = root.get("hits");
+        long total = longAt(objectAt(hitsNode, "total"), "value", 0);
+        List<MapSearchResultResponse> results = new ArrayList<>();
+        JsonNode hits = objectAt(hitsNode, "hits");
+        if (hits != null && hits.isArray()) {
+            for (JsonNode hit : hits) {
+                JsonNode source = hit.get("_source");
+                if (source != null && source.isObject()) {
+                    results.add(MapSearchResultResponse.fromDocument(fromSource(source), doubleAt(hit, "_score", 0.0)));
+                }
+            }
+        }
+        return new MapSearchResponse(results, total, 0, size);
+    }
+
+    @Override
     public MapSearchFacetsResponse facets() {
         ensureIndex();
         Map<String, Object> body = new LinkedHashMap<>();
@@ -101,7 +178,8 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 "terrainAlgorithms", termsAgg("terrainAlgorithm"),
                 "caveAlgorithms", termsAgg("caveAlgorithm"),
                 "roadAlgorithms", termsAgg("roadAlgorithm"),
-                "objectPlacementAlgorithms", termsAgg("objectPlacementAlgorithm")
+                "objectPlacementAlgorithms", termsAgg("objectPlacementAlgorithm"),
+                "livingActivities", termsAgg("livingActivity")
         ));
 
         JsonNode root = requestJson("POST", "/" + settings.indexName() + "/_search", body);
@@ -112,7 +190,8 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 buckets(aggs, "terrainAlgorithms"),
                 buckets(aggs, "caveAlgorithms"),
                 buckets(aggs, "roadAlgorithms"),
-                buckets(aggs, "objectPlacementAlgorithms")
+                buckets(aggs, "objectPlacementAlgorithms"),
+                buckets(aggs, "livingActivities")
         );
     }
 
@@ -128,6 +207,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         );
         HttpResponse<String> response = request("PUT", "/" + settings.indexName(), body);
         if (response.statusCode() == 400 && response.body().contains("resource_already_exists_exception")) {
+            updateMapping();
             indexReady.set(true);
             return;
         }
@@ -135,10 +215,24 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         indexReady.set(true);
     }
 
+    private void updateMapping() {
+        Map<String, Object> body = Map.of("properties", indexProperties());
+        HttpResponse<String> response = request("PUT", "/" + settings.indexName() + "/_mapping", body);
+        ensureSuccess(response);
+    }
+
     private Map<String, Object> indexProperties() {
         Map<String, Object> statsProperties = new LinkedHashMap<>();
         for (String field : STAT_FIELDS) {
             statsProperties.put(field, Map.of("type", "double"));
+        }
+        Map<String, Object> livingStatsProperties = new LinkedHashMap<>();
+        for (String field : LIVING_STAT_FIELDS) {
+            livingStatsProperties.put(field, Map.of("type", "double"));
+        }
+        Map<String, Object> dnaProperties = new LinkedHashMap<>();
+        for (String field : DNA_FIELDS) {
+            dnaProperties.put(field, Map.of("type", "double"));
         }
 
         Map<String, Object> properties = new LinkedHashMap<>();
@@ -158,7 +252,10 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         properties.put("caveAlgorithm", Map.of("type", "keyword"));
         properties.put("roadAlgorithm", Map.of("type", "keyword"));
         properties.put("objectPlacementAlgorithm", Map.of("type", "keyword"));
+        properties.put("livingActivity", Map.of("type", "keyword"));
         properties.put("stats", Map.of("properties", statsProperties));
+        properties.put("livingStats", Map.of("properties", livingStatsProperties));
+        properties.put("mapDna", Map.of("properties", dnaProperties));
         properties.put("createdAt", Map.of("type", "date"));
         properties.put("updatedAt", Map.of("type", "date"));
         return properties;
@@ -179,6 +276,7 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         term(filter, "caveAlgorithm", request.caveAlgorithm());
         term(filter, "roadAlgorithm", request.roadAlgorithm());
         term(filter, "objectPlacementAlgorithm", request.objectPlacementAlgorithm());
+        term(filter, "livingActivity", request.livingActivity());
         for (String feature : request.features()) {
             term(filter, "features", feature);
         }
@@ -186,6 +284,9 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         range(filter, "height", request.minHeight(), request.maxHeight());
         for (Map.Entry<String, NumericRange> entry : request.stats().entrySet()) {
             range(filter, "stats." + entry.getKey(), entry.getValue().min(), entry.getValue().max());
+        }
+        for (Map.Entry<String, NumericRange> entry : request.livingStats().entrySet()) {
+            range(filter, "livingStats." + entry.getKey(), entry.getValue().min(), entry.getValue().max());
         }
 
         Map<String, Object> bool = new LinkedHashMap<>();
@@ -256,7 +357,10 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
         source.put("caveAlgorithm", document.caveAlgorithm());
         source.put("roadAlgorithm", document.roadAlgorithm());
         source.put("objectPlacementAlgorithm", document.objectPlacementAlgorithm());
+        source.put("livingActivity", document.livingActivity());
         source.put("stats", document.stats());
+        source.put("livingStats", document.livingStats());
+        source.put("mapDna", document.mapDna());
         source.put("createdAt", document.createdAt().toString());
         source.put("updatedAt", document.updatedAt().toString());
         return source;
@@ -280,15 +384,22 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
                 textAt(source, "caveAlgorithm", ""),
                 textAt(source, "roadAlgorithm", ""),
                 textAt(source, "objectPlacementAlgorithm", ""),
+                textAt(source, "livingActivity", "quiet"),
                 statsAt(source),
+                numberMapAt(source, "livingStats"),
+                numberMapAt(source, "mapDna"),
                 java.time.Instant.parse(textAt(source, "createdAt", "1970-01-01T00:00:00Z")),
                 java.time.Instant.parse(textAt(source, "updatedAt", "1970-01-01T00:00:00Z"))
         );
     }
 
     private Map<String, Double> statsAt(JsonNode source) {
+        return numberMapAt(source, "stats");
+    }
+
+    private Map<String, Double> numberMapAt(JsonNode source, String objectField) {
         Map<String, Double> stats = new LinkedHashMap<>();
-        JsonNode statsNode = source.get("stats");
+        JsonNode statsNode = source.get(objectField);
         if (statsNode == null || !statsNode.isObject()) {
             return stats;
         }
@@ -299,6 +410,38 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
             }
         }
         return stats;
+    }
+
+    private MapSearchDocument findByProjectId(UUID projectId) {
+        HttpResponse<String> response = request("GET", "/" + settings.indexName() + "/_doc/" + encode(projectId.toString()), null);
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        ensureSuccess(response);
+        try {
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode source = root.get("_source");
+            return source == null || !source.isObject() ? null : fromSource(source);
+        } catch (Exception exception) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "SEARCH_RESPONSE_INVALID", "Elasticsearch response was invalid JSON");
+        }
+    }
+
+    private String similarityScript() {
+        StringBuilder script = new StringBuilder("double distance = 0.0;");
+        for (String field : DNA_FIELDS) {
+            script.append("if (params.containsKey('")
+                    .append(field)
+                    .append("') && doc['mapDna.")
+                    .append(field)
+                    .append("'].size() != 0) { double d = doc['mapDna.")
+                    .append(field)
+                    .append("'].value - params['")
+                    .append(field)
+                    .append("']; distance += d * d; }");
+        }
+        script.append("return 1.0 / (1.0 + distance);");
+        return script.toString();
     }
 
     private List<String> stringListAt(JsonNode source, String field) {
@@ -374,5 +517,10 @@ public class HttpMapSearchIndexClient implements MapSearchIndexClient {
     private long longAt(JsonNode node, String field, long fallback) {
         JsonNode value = objectAt(node, field);
         return value == null || !value.isNumber() ? fallback : value.longValue();
+    }
+
+    private double doubleAt(JsonNode node, String field, double fallback) {
+        JsonNode value = objectAt(node, field);
+        return value == null || !value.isNumber() ? fallback : value.doubleValue();
     }
 }

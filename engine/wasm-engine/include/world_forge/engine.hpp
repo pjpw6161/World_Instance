@@ -5,7 +5,7 @@
 
 namespace world_forge {
 
-const char* engine_version();
+std::string engine_version();
 
 std::string generate_map_json(
     const std::string& engine_version,
