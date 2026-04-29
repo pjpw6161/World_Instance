@@ -6,6 +6,16 @@ export const worldForgeAuthTokenStorageKey = "worldForge.authToken";
 
 export type MapVisibility = "PRIVATE" | "PUBLIC";
 
+class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 export interface AuthUserPayload {
   id: string;
   email: string;
@@ -26,6 +36,10 @@ export interface WorldStatePayload {
     createdAt: string;
   };
   entities: EntityStateDto[];
+}
+
+export interface WorldInstancePayload extends WorldInstanceDto {
+  createdAt: string;
 }
 
 export interface MapVersionPayload {
@@ -197,16 +211,34 @@ export async function listMyMaps(): Promise<MapProjectPayload[]> {
 }
 
 export async function fetchMapProject(projectId: string): Promise<MapProjectPayload> {
-  return fetchJson<MapProjectPayload>(`/api/maps/${projectId}`, undefined, { auth: false });
+  try {
+    return await fetchJson<MapProjectPayload>(`/api/maps/${projectId}`);
+  } catch (error) {
+    if (
+      getStoredAuthToken()
+      && error instanceof ApiRequestError
+      && (error.status === 401 || error.status === 403)
+    ) {
+      return fetchJson<MapProjectPayload>(`/api/maps/${projectId}`, undefined, { auth: false });
+    }
+    throw error;
+  }
 }
 
 export async function updateMapProjectVisibility(projectId: string, visibility: MapVisibility): Promise<MapProjectPayload> {
+  return updateMapProject(projectId, { visibility });
+}
+
+export async function updateMapProject(
+  projectId: string,
+  input: { title?: string; description?: string; visibility?: MapVisibility },
+): Promise<MapProjectPayload> {
   return fetchJson<MapProjectPayload>(`/api/maps/${projectId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ visibility }),
+    body: JSON.stringify(input),
   });
 }
 
@@ -229,6 +261,10 @@ export async function createWorldInstance(input: CreateWorldInstanceInput): Prom
       entities: input.entities ?? [],
     }),
   });
+}
+
+export async function listMyWorldInstances(): Promise<WorldInstancePayload[]> {
+  return fetchJson<WorldInstancePayload[]>("/api/me/world-instances");
 }
 
 export async function searchMaps(input: SearchMapsInput): Promise<MapSearchPayload> {
@@ -299,7 +335,7 @@ async function fetchJson<T>(path: string, init?: RequestInit, options: { auth?: 
   const response = await fetch(`${apiBaseUrl}${path}`, options.auth === false ? init : withAuthHeader(init));
   if (!response.ok) {
     const body = await readErrorBody(response);
-    throw new Error(body || `Request failed with ${response.status}`);
+    throw new ApiRequestError(body || `Request failed with ${response.status}`, response.status);
   }
   return response.json() as Promise<T>;
 }

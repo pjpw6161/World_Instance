@@ -4,6 +4,8 @@ import {
   clearStoredAuthToken,
   createMapProject,
   forkMapProject,
+  fetchMapProject,
+  listMyWorldInstances,
   login,
   searchMaps,
   storeAuthToken,
@@ -97,6 +99,65 @@ describe("world API client", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer fork-token");
   });
 
+  it("sends bearer tokens when loading map detail", async () => {
+    storeAuthToken("detail-token");
+    vi.stubGlobal("fetch", vi.fn(async () => responseJson({
+      id: "project-1",
+      ownerId: "user-1",
+      title: "Private Map",
+      description: "",
+      visibility: "PRIVATE",
+      currentVersionId: "version-1",
+      currentVersion: null,
+      createdAt: "2026-04-28T00:00:00Z",
+      updatedAt: "2026-04-28T00:00:00Z",
+    })));
+
+    await fetchMapProject("project-1");
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/maps/project-1");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer detail-token");
+  });
+
+  it("retries public map detail without auth when the stored token is rejected", async () => {
+    storeAuthToken("expired-token");
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(responseError(401, { message: "Bearer token has expired" }))
+      .mockResolvedValueOnce(responseJson({
+        id: "public-project",
+        ownerId: "user-2",
+        title: "Public Map",
+        description: "",
+        visibility: "PUBLIC",
+        currentVersionId: "version-2",
+        currentVersion: null,
+        createdAt: "2026-04-28T00:00:00Z",
+        updatedAt: "2026-04-28T00:00:00Z",
+      })));
+
+    const project = await fetchMapProject("public-project");
+
+    expect(project.title).toBe("Public Map");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+
+    const firstInit = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    const secondInit = vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit | undefined;
+    expect(new Headers(firstInit.headers).get("Authorization")).toBe("Bearer expired-token");
+    expect(new Headers(secondInit?.headers).has("Authorization")).toBe(false);
+  });
+
+  it("sends bearer tokens when loading my world instances", async () => {
+    storeAuthToken("worlds-token");
+    vi.stubGlobal("fetch", vi.fn(async () => responseJson([])));
+
+    await listMyWorldInstances();
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/me/world-instances");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer worlds-token");
+  });
+
   it("keeps public search independent from bearer token state", async () => {
     storeAuthToken("possibly-expired-token");
     vi.stubGlobal("fetch", vi.fn(async () => responseJson({
@@ -152,6 +213,15 @@ describe("world API client", () => {
 function responseJson(body: unknown): Response {
   return {
     ok: true,
+    status: 200,
+    json: async () => body,
+  } as Response;
+}
+
+function responseError(status: number, body: unknown): Response {
+  return {
+    ok: false,
+    status,
     json: async () => body,
   } as Response;
 }

@@ -9,6 +9,7 @@ import { createInitialRecipe } from "../editor/editorState";
 import {
   createMapProject,
   createWorldInstance,
+  fetchMapProject,
   updateMapProjectVisibility,
   type MapProjectPayload,
   type MapVisibility,
@@ -34,6 +35,7 @@ export function EditorPage() {
   const [savedProject, setSavedProject] = useState<MapProjectPayload | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const engineRef = useRef<EditorEngine | null>(null);
+  const loadedSourceMapIdRef = useRef<string | null>(null);
 
   const getEngine = useCallback(() => {
     engineRef.current ??= createEditorEngine({
@@ -43,7 +45,7 @@ export function EditorPage() {
   }, []);
 
   const generateMap = useCallback(
-    async (nextRecipe: GenerationRecipe) => {
+    async (nextRecipe: GenerationRecipe, sourceProject?: MapProjectPayload) => {
       const validation = validateGenerationRecipe(nextRecipe);
       if (!validation.ok) {
         setError(validation.issues[0]?.message ?? "Invalid recipe");
@@ -58,8 +60,8 @@ export function EditorPage() {
         const generated = await engine.generate(validation.value);
         setMapData(generated);
         setGeneratedRecipe(validation.value);
-        setSavedProject(null);
-        setSaveStatus("idle");
+        setSavedProject(sourceProject ?? null);
+        setSaveStatus(sourceProject ? "ready" : "idle");
         setSaveError(null);
         setEngineRuntime(engine.runtime());
         setStatus("ready");
@@ -129,6 +131,30 @@ export function EditorPage() {
     return () => engineRef.current?.dispose();
   }, []);
 
+  useEffect(() => {
+    const sourceMapId = new URLSearchParams(window.location.search).get("mapId");
+    if (!sourceMapId || loadedSourceMapIdRef.current === sourceMapId) {
+      return;
+    }
+    loadedSourceMapIdRef.current = sourceMapId;
+    setStatus("loading");
+    setError(null);
+    void fetchMapProject(sourceMapId)
+      .then((project) => {
+        if (!project.currentVersion) {
+          throw new Error("Map has no current version");
+        }
+        setProjectTitle(project.title);
+        setProjectDescription(project.description);
+        setRecipe(project.currentVersion.recipe);
+        return generateMap(project.currentVersion.recipe, project);
+      })
+      .catch((unknownError) => {
+        setError(unknownError instanceof Error ? unknownError.message : "Could not open saved map");
+        setStatus("error");
+      });
+  }, [generateMap]);
+
   return (
     <main className="editor-shell">
       <header className="editor-header">
@@ -142,8 +168,8 @@ export function EditorPage() {
           <small>{engineRuntime.detail}</small>
         </div>
         <nav className="top-nav" aria-label="Navigation">
-          <a className="text-link" href="/maps">
-            My Maps
+          <a className="text-link" href="/dashboard">
+            Dashboard
           </a>
           <a className="text-link" href="/gallery">
             Gallery

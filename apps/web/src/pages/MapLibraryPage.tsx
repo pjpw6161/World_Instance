@@ -83,6 +83,9 @@ export function MapLibraryPage() {
           <a className="text-link" href="/editor">
             Editor
           </a>
+          <a className="text-link" href="/dashboard">
+            Dashboard
+          </a>
           <a className="text-link" href="/gallery">
             Gallery
           </a>
@@ -123,6 +126,9 @@ export function MapLibraryPage() {
                 </div>
               </dl>
               <div className="map-actions">
+                <a className="secondary-button text-button" href={`/maps/${encodeURIComponent(project.id)}`}>
+                  Details
+                </a>
                 <button type="button" className="generate-button" onClick={() => void openWorld(project)} disabled={!project.currentVersionId || status === "saving"}>
                   Open World
                 </button>

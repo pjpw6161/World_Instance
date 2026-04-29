@@ -219,8 +219,8 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
           <a className="text-link" href="/editor">
             Editor
           </a>
-          <a className="text-link" href="/maps">
-            My Maps
+          <a className="text-link" href="/dashboard">
+            Dashboard
           </a>
           <a className="text-link" href="/gallery">
             Gallery
@@ -446,7 +446,7 @@ function MapResultCard({ result, onOpen, busy }: { result: MapSearchResultPayloa
         </div>
       </div>
       <div className="gallery-card-actions">
-        <a className="secondary-button text-button" href={`/gallery/${encodeURIComponent(result.projectId)}`}>
+        <a className="secondary-button text-button" href={`/maps/${encodeURIComponent(result.projectId)}`}>
           Details
         </a>
         <button type="button" className="generate-button" onClick={onOpen} disabled={busy}>

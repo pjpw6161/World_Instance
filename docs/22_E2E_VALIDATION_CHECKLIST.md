@@ -1,14 +1,18 @@
 # MVP End-to-End Validation Checklist
 
-This checklist validates the user-facing MVP flow after Auth/Ownership. It is intentionally ASCII-only so it stays readable in Windows PowerShell, Git diffs, and Codex reviews without encoding flags.
+This checklist validates the current user-facing World Forge flow after Auth/Ownership, Gallery/Explore, Map Detail, My Worlds, World Instance movement, and search reindex work.
+
+The checklist stays ASCII-only so it remains readable in Windows PowerShell, Git diffs, and Codex reviews without encoding flags.
 
 ## Scope
 
-- Browser map generation uses the C++/WebAssembly artifact.
-- Spring Boot stores users, map projects, versions, world instances, entity state, publish state, and search projection updates.
+- Browser map generation uses the C++/WebAssembly artifact when available.
+- TypeScript generation is only a labeled fallback when WASM cannot load.
+- Spring Boot stores users, map projects, map versions, world instances, entity state, publish state, and search projection updates.
 - PostgreSQL is the source of truth.
 - Elasticsearch contains only rebuildable public-map projections.
-- World Instance movement and entity wander run in the browser.
+- World Instance player movement and entity wander run in the browser.
+- The browser calls Spring Boot search APIs, not Elasticsearch directly.
 - Raw Elasticsearch Query DSL is never sent by browser clients.
 
 ## Common Setup
@@ -39,17 +43,22 @@ Run the frontend in another terminal from the repository root:
 npm run web:dev
 ```
 
-Common variables for API checks:
+Common variables for optional API checks:
 
 ```powershell
 $api = "http://localhost:8080"
 $web = "http://localhost:5173"
 ```
 
+After signup or login, keep a bearer header:
+
+```powershell
+$headers = @{ Authorization = "Bearer <token>" }
+```
+
 ## 1. Sign Up
 
-- Purpose: Confirm a new user can create an account and receive a JWT.
-- Prerequisites: API and frontend are running.
+- Prerequisites: PostgreSQL is running; API and frontend are running.
 - Steps:
   - Open `$web/signup`.
   - Enter a unique email, password with at least 8 characters, and nickname.
@@ -62,23 +71,23 @@ $signup = Invoke-RestMethod -Method Post "$api/api/auth/signup" -ContentType "ap
   password = "Password123!"
   nickname = "E2E User"
 } | ConvertTo-Json)
-$signup.token
+$headers = @{ Authorization = "Bearer $($signup.token)" }
 ```
 
 - Expected Result: The browser navigates to `/editor`; API returns `token`, `tokenType = Bearer`, and `user`.
 - If Fails Check:
-  - UI: `apps/web/src/pages/AuthPage.tsx`
   - API: `POST /api/auth/signup`
+  - UI: `apps/web/src/pages/AuthPage.tsx`
+  - API client: `apps/web/src/world/worldApi.ts`
   - Backend: `apps/api/src/main/java/com/worldforge/api/service/AuthService.java`
   - Tests: `apps/api/src/test/java/com/worldforge/api/AuthApiIntegrationTests.java`
 
 ## 2. Login
 
-- Purpose: Confirm an existing user can authenticate and store a bearer token.
-- Prerequisites: User account exists.
+- Prerequisites: A user account exists.
 - Steps:
   - Open `$web/login`.
-  - Enter email and password.
+  - Enter the email and password.
   - Submit the form.
   - Optional API check:
 
@@ -93,171 +102,110 @@ Invoke-RestMethod "$api/api/me" -Headers $headers
 
 - Expected Result: The browser navigates to `/editor`; `GET /api/me` returns the current user.
 - If Fails Check:
-  - UI/API client: `apps/web/src/world/worldApi.ts`
   - API: `POST /api/auth/login`, `GET /api/me`
+  - UI: `apps/web/src/pages/AuthPage.tsx`, `apps/web/src/components/AuthStatus.tsx`
+  - API client: `apps/web/src/world/worldApi.ts`
   - Backend: `apps/api/src/main/java/com/worldforge/api/auth/JwtAuthenticationFilter.java`
 
 ## 3. Generate Map
 
-- Purpose: Confirm `/editor` generates a map using the browser engine.
-- Prerequisites: Frontend is running; `npm run wasm:build` has copied artifacts to `apps/web/public/wasm`.
+- Prerequisites: Frontend is running; `/editor` is open.
+- Steps:
+  - Set width, height, seed, features, algorithms, and parameters.
+  - Click `Generate`.
+- Expected Result: A non-empty map renders, stats populate, and generation status returns to ready.
+- If Fails Check:
+  - UI: `apps/web/src/pages/EditorPage.tsx`
+  - Controls: `apps/web/src/components/ControlPanel.tsx`
+  - Engine adapter: `apps/web/src/editor/engineAdapter.ts`
+  - Shared types: `packages/shared/src/types.ts`
+
+## 4. WASM Runtime Check
+
+- Prerequisites: `npm run wasm:build` completed in an Emscripten-activated shell.
 - Steps:
   - Open `$web/editor`.
-  - Confirm the Engine badge says `WASM`.
-  - Click `Generate`.
-- Expected Result: A map appears, status becomes ready, stats and `mapHash` are populated.
+  - Check the `Engine` badge before and after `Generate`.
+  - Open browser DevTools Network and filter for `world_forge_engine.js` or `.wasm`.
+- Expected Result: The UI shows `WASM`; artifacts are loaded from `/wasm`; fallback is not shown during normal generation.
 - If Fails Check:
-  - UI: `apps/web/src/pages/EditorPage.tsx`
-  - Engine adapter: `apps/web/src/editor/engineAdapter.ts`
-  - WASM wrapper: `engine/wasm-engine/ts/src/engine.ts`
-  - WASM artifact path: `apps/web/public/wasm/world_forge_engine.js`
+  - Artifact path: `apps/web/public/wasm/world_forge_engine.js`, `apps/web/public/wasm/world_forge_engine.wasm`
+  - Build script: `engine/wasm-engine/scripts/build-wasm.ps1`
+  - Wrapper: `engine/wasm-engine/ts/src/engine.ts`
+  - Frontend adapter: `apps/web/src/editor/engineAdapter.ts`
 
-## 4. Same Seed and Recipe Produce Same mapHash
+## 5. mapHash Check
 
-- Purpose: Confirm deterministic generation.
-- Prerequisites: `/editor` can generate maps.
+- Prerequisites: `/editor` can generate a map.
 - Steps:
-  - Set width, height, seed, features, algorithms, and params.
-  - Click `Generate`.
-  - Record `mapHash`.
-  - Click `Generate` again without changing any controls.
-- Expected Result: The second `mapHash` exactly matches the first.
+  - Generate a map with a fixed seed and recipe.
+  - Record the `mapHash`.
+  - Click `Generate` again without changing controls.
+  - Change only the seed and generate once more.
+- Expected Result: Same seed and recipe produce the same `mapHash`; a different seed produces a different `mapHash`.
 - If Fails Check:
-  - UI: `apps/web/src/pages/EditorPage.tsx`
+  - Stats panel: `apps/web/src/components/StatsPanel.tsx`
+  - WASM engine: `engine/wasm-engine/src/engine.cpp`
+  - Wrapper tests: `engine/wasm-engine/ts/src/engine.test.ts`
   - Shared validation: `packages/shared/src/validation.ts`
-  - WASM engine: `engine/wasm-engine/src/engine.cpp`
-  - Tests: `engine/wasm-engine/ts/src/engine.test.ts`
 
-## 5. Different Seed Changes mapHash
+## 6. Save Map
 
-- Purpose: Confirm seed affects generated output.
-- Prerequisites: A baseline mapHash has been recorded.
-- Steps:
-  - Change the seed input, or click `Random`.
-  - Click `Generate`.
-  - Compare the new `mapHash` with the baseline.
-- Expected Result: The new `mapHash` is different for a materially different seed.
-- If Fails Check:
-  - UI: `apps/web/src/components/ControlPanel.tsx`
-  - Seed helper: `apps/web/src/editor/editorState.ts`
-  - WASM engine: `engine/wasm-engine/src/engine.cpp`
-
-## 6. Feature Checkbox Is Reflected
-
-- Purpose: Confirm feature toggles are included in the recipe and influence supported output.
-- Prerequisites: `/editor` is loaded and a user is signed in if saving will be checked.
-- Steps:
-  - Toggle one or more features such as `Forests`, `Roads`, or `Caves`.
-  - Click `Generate`.
-  - Save the map as private.
-  - API check the stored recipe:
-
-```powershell
-$mapId = "<saved-project-id>"
-Invoke-RestMethod "$api/api/maps/$mapId" -Headers $headers
-```
-
-- Expected Result: `currentVersion.recipe.features` matches the checkbox state. Supported features may also change stats, objects, terrain, or portal data.
-- If Fails Check:
-  - UI controls: `apps/web/src/components/ControlPanel.tsx`
-  - Editor state: `apps/web/src/editor/editorState.ts`
-  - Backend validation: `apps/api/src/main/java/com/worldforge/api/service/RecipePayloadValidator.java`
-
-## 7. 2D Terrain View
-
-- Purpose: Confirm the terrain renderer consumes `MapData`.
-- Prerequisites: A map has been generated.
-- Steps:
-  - In `/editor`, select `2D Terrain`.
-  - Inspect terrain colors and visible land/water/forest/mountain/road/cave tiles.
-- Expected Result: The canvas renders a non-empty 2D terrain map.
-- If Fails Check:
-  - View shell: `apps/web/src/components/MapViewport.tsx`
-  - Renderer: `apps/web/src/renderers/canvasRenderers.tsx`
-  - Map data type: `packages/shared/src/types.ts`
-
-## 8. Height Map View
-
-- Purpose: Confirm `heightMap` renders separately from terrain colors.
-- Prerequisites: A map has been generated.
-- Steps:
-  - In `/editor`, select `Height Map`.
-  - Compare brightness/height variation with terrain.
-- Expected Result: The canvas shows grayscale or height-based visualization.
-- If Fails Check:
-  - View shell: `apps/web/src/components/MapViewport.tsx`
-  - Renderer: `apps/web/src/renderers/canvasRenderers.tsx`
-  - WASM output validation: `engine/wasm-engine/ts/src/engine.ts`
-
-## 9. Side View
-
-- Purpose: Confirm side profile rendering is available from the same `MapData`.
-- Prerequisites: A map has been generated.
-- Steps:
-  - In `/editor`, select `Side View`.
-  - Inspect the terrain profile.
-- Expected Result: The side view renders a profile from the generated height data.
-- If Fails Check:
-  - View shell: `apps/web/src/components/MapViewport.tsx`
-  - Renderer: `apps/web/src/renderers/canvasRenderers.tsx`
-
-## 10. Save Map
-
-- Purpose: Confirm an authenticated user can store a generated map in PostgreSQL.
-- Prerequisites: User is logged in; map has been generated.
+- Prerequisites: User is logged in; a map has been generated.
 - Steps:
   - Enter a title and optional description in `/editor`.
-  - Click `Save Private`.
+  - Click `Save Private` or `Save Public`.
   - Optional API check:
 
 ```powershell
 Invoke-RestMethod "$api/api/me/maps" -Headers $headers
 ```
 
-- Expected Result: Save status becomes ready; the map appears under `/maps`; the saved project has `visibility = PRIVATE`.
+- Expected Result: Save succeeds; the project has a `currentVersion` with recipe, stats, and `mapHash`.
 - If Fails Check:
+  - API: `POST /api/maps`
   - UI: `apps/web/src/pages/EditorPage.tsx`
   - API client: `apps/web/src/world/worldApi.ts`
-  - API: `POST /api/maps`
   - Backend: `apps/api/src/main/java/com/worldforge/api/service/MapPersistenceService.java`
+  - Validation: `apps/api/src/main/java/com/worldforge/api/service/RecipePayloadValidator.java`
 
-## 11. List Saved Maps
+## 7. My Worlds List
 
-- Purpose: Confirm the user can see their own saved maps.
-- Prerequisites: At least one map has been saved.
+- Prerequisites: User is logged in; at least one map is saved.
 - Steps:
-  - Open `$web/maps`.
+  - Open `$web/me/worlds` or `$web/dashboard`.
   - Click `Refresh` if needed.
-- Expected Result: Saved maps are listed with title, visibility, size, updated time, and mapHash.
+- Expected Result: `Map Projects` shows owned maps with visibility, size, creature count, reachable ratio, dates, and actions. `World Instances` shows owned world snapshots when they exist.
 - If Fails Check:
-  - UI: `apps/web/src/pages/MapLibraryPage.tsx`
-  - API: `GET /api/me/maps`
-  - Backend: `MapPersistenceService.listMyMaps`
+  - API: `GET /api/me/maps`, `GET /api/me/world-instances`
+  - UI: `apps/web/src/pages/DashboardPage.tsx`
+  - API client: `apps/web/src/world/worldApi.ts`
+  - Backend: `MapPersistenceService.listMyMaps`, `WorldInstanceService.listMyWorlds`
 
-## 12. Map Detail Lookup
+## 8. Map Detail
 
-- Purpose: Confirm a saved map can be retrieved by id.
-- Prerequisites: A saved project id is available from `/maps` or API output.
+- Prerequisites: A saved map project exists.
 - Steps:
-  - Current UI has no standalone `/maps/{id}` detail page; use API for detail validation.
+  - From My Worlds or Gallery, click `Open Detail` or `Details`.
+  - Confirm the URL is `/maps/{projectId}`.
+  - Optional API check:
 
 ```powershell
-$mapId = "<project-id>"
-Invoke-RestMethod "$api/api/maps/$mapId" -Headers $headers
+Invoke-RestMethod "$api/api/maps/<project-id>" -Headers $headers
 ```
 
-- Expected Result: API returns project metadata and `currentVersion` recipe/stats/mapHash. Private maps are visible only to the owner.
+- Expected Result: Detail shows title, description, owner, visibility, map type, seed, size, engine version, features, algorithms, params, stats, living stats, `mapHash`, preview, and dates. Owner-only metadata actions appear only for the owner.
 - If Fails Check:
   - API: `GET /api/maps/{projectId}`
+  - UI: `apps/web/src/pages/MapDetailPage.tsx`
+  - API client: `apps/web/src/world/worldApi.ts`
   - Backend: `MapPersistenceService.getMap`
-  - Tests: `MapApiIntegrationTests.hidesPrivateMapsFromOtherUsersAndAnonymousRequests`
 
-## 13. Create World Instance
+## 9. Create World Instance
 
-- Purpose: Confirm a saved map version can become a World Instance.
-- Prerequisites: A saved map has a `currentVersionId`.
+- Prerequisites: A saved map has a `currentVersionId`; user is logged in.
 - Steps:
-  - From `/editor`, click `Open World` after saving, or open `/maps` and click `Open World`.
+  - From `/editor`, click `Open World` after saving, or from My Worlds/Map Detail click `Create World` or `Create World Instance`.
   - Optional API check:
 
 ```powershell
@@ -269,165 +217,241 @@ $world = Invoke-RestMethod -Method Post "$api/api/world-instances" -Headers $hea
 } | ConvertTo-Json -Depth 10)
 ```
 
-- Expected Result: Browser navigates to `/world/{worldInstanceId}`; API returns a world instance owned by the current user.
+- Expected Result: Browser navigates to `/world/{worldInstanceId}`; API returns `worldInstance` and `entities`.
 - If Fails Check:
-  - UI: `apps/web/src/pages/EditorPage.tsx`, `apps/web/src/pages/MapLibraryPage.tsx`
   - API: `POST /api/world-instances`
+  - UI: `apps/web/src/pages/EditorPage.tsx`, `apps/web/src/pages/DashboardPage.tsx`, `apps/web/src/pages/MapDetailPage.tsx`
   - Backend: `apps/api/src/main/java/com/worldforge/api/service/WorldInstanceService.java`
 
-## 14. Player Movement
+## 10. Player Movement
 
-- Purpose: Confirm the player dot moves client-side.
-- Prerequisites: `/world/{id}` is open and the world loaded.
+- Prerequisites: `/world/{worldInstanceId}` is open and the map/state have loaded.
 - Steps:
-  - Press Arrow keys or WASD.
-  - Watch the player dot and the player coordinate in the sidebar.
-- Expected Result: Player position changes on walkable tiles; world time increments; repeated key presses respect the displayed movement cost.
+  - Use Arrow keys to move the player.
+  - Watch the player dot and the sidebar coordinates.
+- Expected Result: Player position changes on walkable tiles; movement is client-side; world time increases.
 - If Fails Check:
   - UI: `apps/web/src/pages/WorldPage.tsx`
-  - Movement logic: `apps/web/src/world/worldState.ts`
   - Canvas: `apps/web/src/world/WorldCanvas.tsx`
-
-## 15. Entity Wander
-
-- Purpose: Confirm non-player entities move without server simulation ticks.
-- Prerequisites: `/world/{id}` is open and loaded with creature entities.
-- Steps:
-  - Wait 2 to 5 seconds.
-  - Observe creature dots in 2D.
-  - Optionally switch 2D/3D and confirm entity positions remain consistent.
-- Expected Result: Entity dots wander client-side, avoid blocked tiles, and prefer reachable low-cost paths when available; no server polling tick is required.
-- If Fails Check:
-  - UI interval: `apps/web/src/pages/WorldPage.tsx`
-  - Logic: `worldState.tickWanderingEntities`
+  - Logic: `apps/web/src/world/worldState.ts`
   - Tests: `apps/web/src/world/worldState.test.ts`
 
-## 16. Blocked Tile Movement Is Prevented
+## 11. Entity Wander
 
-- Purpose: Confirm `collisionMap`, blocked objects, and height rules prevent illegal movement.
-- Prerequisites: World is open with visible blocked terrain such as water, trees, mountain cliffs, or cave walls.
+- Prerequisites: `/world/{worldInstanceId}` is open with generated entities.
+- Steps:
+  - Wait 2 to 5 seconds.
+  - Observe non-player entity dots.
+  - Switch views if 3D preview is available and confirm positions remain consistent.
+- Expected Result: Entity wander runs in the browser, avoids blocked tiles, uses the same saved entity state, and does not require server simulation ticks.
+- If Fails Check:
+  - UI timer: `apps/web/src/pages/WorldPage.tsx`
+  - Logic: `worldState.tickWanderingEntities`
+  - Shared DTOs: `packages/shared/src/types.ts`
+  - Backend storage only: `WorldInstanceService.saveWorldState`
+
+## 12. collisionMap Movement Restriction
+
+- Prerequisites: World is open with visible water, trees, cave walls, or steep terrain.
 - Steps:
   - Move the player toward a visibly blocked tile.
-  - Move across road, grass, and forest tiles when they are visible.
-  - Watch the player coordinate in the sidebar.
-- Expected Result: The player does not enter blocked tiles; water, tree, and cave-wall tiles are blocked; road has lower movement cost than grass, and forest has higher movement cost; low height differences are reachable, high cliffs are blocked or routed around, and 3D movement-readiness indicators match the same 2D movement rules.
+  - Move across road, grass, and forest tiles when visible.
+  - Observe whether movement is blocked or slowed.
+- Expected Result: Player cannot enter blocked tiles. Water, tree, and cave-wall tiles are blocked. Road has lower movement cost than grass, forest has higher movement cost, and height/jump/slope restrictions use the same movement rule as 3D preview.
 - If Fails Check:
-  - Logic: `worldState.canEnterTile`
-  - Tests: `worldState.test.ts` cases for collision, blocked objects, costMap, terrain cost normalization, jumpHeight, and maxSlope
-  - Source data: `collisionMap`, `costMap`, `terrainMap`, `heightMap`, `objectList` in `MapData`
+  - Logic: `worldState.canEnterTile`, `worldState.stepEntityToward`
+  - Source data: `collisionMap`, `costMap`, `terrainMap`, `heightMap`, `objectList`
+  - Tests: `apps/web/src/world/worldState.test.ts`
 
-## 16a. Cave Portal Transition
+## 13. Portal and Cave Movement
 
-- Purpose: Confirm surface and cave layers use the same World Instance state and can transition through portals.
-- Prerequisites: World is open from a map generated with `Caves` enabled and `portalList` is non-empty.
+- Prerequisites: Map was generated with caves enabled; `portalList` is non-empty.
 - Steps:
-  - Move the player onto a visible cave entrance marker.
-  - Press `E`, `Enter`, or click `Use Portal` if the player is standing on the portal.
-  - Repeat the action on the cave-side portal to return to surface.
-- Expected Result: The player `layerId` changes between `surface` and `cave`; player coordinates update to the portal target; entity state remains client-side.
+  - Move the player onto a cave entrance marker.
+  - Click `Use Portal`.
+  - Confirm the layer changes to cave.
+  - Move to the return portal and click `Use Portal` again.
+- Expected Result: Player `layerId` changes between `surface` and `cave`; coordinates move to the portal target; state remains compatible with save/load.
 - If Fails Check:
-  - Portal logic: `apps/web/src/world/worldState.ts`
-  - UI activation: `apps/web/src/pages/WorldPage.tsx`
+  - Logic: `worldState.portalAt`, `worldState.usePortal`
+  - UI: `apps/web/src/pages/WorldPage.tsx`
   - Canvas markers: `apps/web/src/world/WorldCanvas.tsx`
-  - Source data: `MapData.portalList`
+  - WASM output: `MapData.portalList`
 
-## 17. Save World State
+## 14. Save and Restore State
 
-- Purpose: Confirm client-side world state snapshots are persisted.
-- Prerequisites: Player has moved at least once.
+- Prerequisites: World is open; player has moved; at least one entity has wandered.
 - Steps:
-  - Click `Save` in `/world/{id}`.
-  - Optional API check:
+  - Click `Save` in `/world/{worldInstanceId}`.
+  - Reload the browser tab or leave and reopen `/world/{worldInstanceId}`.
+  - Optional API checks:
 
 ```powershell
-Invoke-RestMethod "$api/api/world-instances/<worldInstanceId>/state" -Headers $headers
+Invoke-RestMethod "$api/api/world-instances/<world-instance-id>/state" -Headers $headers
 ```
 
-- Expected Result: API state contains updated `worldTime`, player position, entity positions, layer ids, state, behavior, and metadata.
+- Expected Result: Player/entity positions, layer ids, world time, behavior/state, movement cost multiplier, jump height, max slope, and metadata restore after reload.
 - If Fails Check:
-  - UI: `WorldPage.saveCurrentState`
-  - API: `PUT /api/world-instances/{worldInstanceId}/state`
+  - API: `GET /api/world-instances/{id}/state`, `PUT /api/world-instances/{id}/state`
+  - UI load/save: `apps/web/src/pages/WorldPage.tsx`
+  - Serialization: `worldState.serializeWorldEntities`, `worldState.fromEntityStateDto`
   - Backend: `WorldInstanceService.saveWorldState`
 
-## 18. Reload World State
+## 15. Public Publish
 
-- Purpose: Confirm saved positions and layer are restored after reload.
-- Prerequisites: World state has been saved after movement.
+- Prerequisites: User owns a private saved map; Elasticsearch is running.
 - Steps:
-  - Reload the browser tab, or leave `/world/{id}` and open it again.
-  - Compare player/entity coordinates, layer, and world time with the saved state.
-- Expected Result: Saved player/entity positions, layer, jumpHeight, maxSlope, movement metadata, and world time are restored.
-- If Fails Check:
-  - UI load path: `WorldPage.loadWorld`
-  - API: `GET /api/world-instances/{worldInstanceId}/state`
-  - DTO mapping: `worldState.fromEntityStateDto`
-
-## 19. Publish Public Map
-
-- Purpose: Confirm a private map can become public/searchable.
-- Prerequisites: A saved private map exists and Elasticsearch is running.
-- Steps:
-  - Open `/maps`.
+  - Open `/me/worlds`.
   - Click `Publish` on a private map.
   - Optional API check:
 
 ```powershell
-$mapId = "<project-id>"
-Invoke-RestMethod -Method Patch "$api/api/maps/$mapId" -Headers $headers -ContentType "application/json" -Body (@{
+Invoke-RestMethod -Method Patch "$api/api/maps/<project-id>" -Headers $headers -ContentType "application/json" -Body (@{
   visibility = "PUBLIC"
 } | ConvertTo-Json)
 ```
 
-- Expected Result: Map visibility becomes `PUBLIC`; indexing is triggered after transaction commit.
+- Expected Result: Map visibility changes to `PUBLIC`; search projection sync is triggered after the PostgreSQL update.
 - If Fails Check:
-  - UI: `apps/web/src/pages/MapLibraryPage.tsx`
   - API: `PATCH /api/maps/{projectId}`
+  - UI: `apps/web/src/pages/DashboardPage.tsx`
+  - Backend: `MapPersistenceService.updateMap`
   - Projection: `MapSearchProjectionService.syncProject`
 
-## 20. Private Map Is Hidden From Search
+## 16. Explore Search
 
-- Purpose: Confirm private maps are not exposed through Elasticsearch search.
+- Prerequisites: At least one map is public; Elasticsearch is healthy.
+- Steps:
+  - Open `$web/gallery` or `$web/explore`.
+  - Search by keyword, title, or description.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps?keyword=<public-title>"
+```
+
+- Expected Result: Public maps appear as result cards with thumbnail or placeholder, title, map type, size, features, stats summary, living stats summary, owner nickname, and created date.
+- If Fails Check:
+  - API: `GET /api/search/maps`
+  - UI: `apps/web/src/pages/GalleryPage.tsx`
+  - API client: `apps/web/src/world/worldApi.ts`
+  - Backend: `apps/api/src/main/java/com/worldforge/api/search/MapSearchService.java`
+  - Elasticsearch client: `apps/api/src/main/java/com/worldforge/api/search/HttpMapSearchIndexClient.java`
+
+## 17. Feature Filter
+
+- Prerequisites: Gallery is open; public maps with different feature sets exist.
+- Steps:
+  - Toggle `trees`, `roads`, `caves`, `rivers`, or `villages`.
+  - Watch results update.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps?features=trees,roads"
+```
+
+- Expected Result: Results include only public maps whose indexed features match the selected filter set.
+- If Fails Check:
+  - UI filter state: `apps/web/src/pages/GalleryPage.tsx`
+  - Parser: `apps/api/src/main/java/com/worldforge/api/search/MapSearchRequestParser.java`
+  - Projection: `MapSearchProjectionService.features`
+
+## 18. Algorithm Filter
+
+- Prerequisites: Gallery is open; public maps with different algorithms exist.
+- Steps:
+  - Select terrain, cave, or road algorithm filters.
+  - Watch results update.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps?terrainAlgorithm=noise-island&caveAlgorithm=cellular-automata&roadAlgorithm=astar"
+```
+
+- Expected Result: Results match the selected algorithm fields and remain limited to public maps.
+- If Fails Check:
+  - UI: `apps/web/src/pages/GalleryPage.tsx`
+  - Parser: `MapSearchRequestParser`
+  - Document projection: `MapSearchProjectionService.toDocument`
+
+## 19. Stats Filter
+
+- Prerequisites: Gallery is open; public maps have stats values.
+- Steps:
+  - Set min/max forest, mountain, water, or land ratio filters.
+  - Watch results update.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps?minForestRatio=0.2&minWaterRatio=0.05&minLandRatio=0.5"
+```
+
+- Expected Result: Results satisfy the numeric stats ranges.
+- If Fails Check:
+  - UI: `apps/web/src/pages/GalleryPage.tsx`
+  - Parser: `MapSearchRequestParser`
+  - Validation: `RecipePayloadValidator`
+  - ES query builder: `HttpMapSearchIndexClient`
+
+## 20. livingStats Filter
+
+- Prerequisites: Gallery is open; public maps have living stats.
+- Steps:
+  - Set min creature count, min reachable ratio, or min portal count.
+  - Watch results update.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps?minCreatureCount=1&minReachableAreaRatio=0.5&minPortalCount=1"
+```
+
+- Expected Result: Results satisfy living stats ranges; cards display creature count, reachable ratio, and portal count.
+- If Fails Check:
+  - UI: `apps/web/src/pages/GalleryPage.tsx`
+  - Projection: `MapSearchProjectionService.livingStats`
+  - Parser: `MapSearchRequestParser`
+  - ES client: `HttpMapSearchIndexClient`
+  - Tests: `apps/api/src/test/java/com/worldforge/api/SearchApiIntegrationTests.java`
+
+## 21. Facets
+
+- Prerequisites: Gallery is open; Elasticsearch has public documents.
+- Steps:
+  - Inspect the Gallery facet side panel.
+  - Optional API check:
+
+```powershell
+Invoke-RestMethod "$api/api/search/maps/facets"
+```
+
+- Expected Result: Facets show counts for map type, features, terrain algorithms, cave algorithms, road algorithms, and living map buckets where data exists.
+- If Fails Check:
+  - API: `GET /api/search/maps/facets`
+  - UI: `apps/web/src/pages/GalleryPage.tsx`
+  - Response DTO: `MapSearchFacetsResponse`
+  - ES aggregations: `HttpMapSearchIndexClient.facets`
+
+## 22. Private Map Is Not Exposed
+
 - Prerequisites: At least one private map exists with a recognizable title.
 - Steps:
-  - Search by the private map title in `/search`.
-  - API check:
+  - Search by the private title in `/gallery`.
+  - Optional API check:
 
 ```powershell
 Invoke-RestMethod "$api/api/search/maps?keyword=<private-title>"
 ```
 
-- Expected Result: The private map is not returned.
+- Expected Result: Private map is not returned. UI result cards do not display private state because search returns only public maps.
 - If Fails Check:
   - Projection guard: `MapSearchProjectionService.syncProject`
-  - Visibility update path: `MapPersistenceService.updateMap`
-  - Tests: `SearchApiIntegrationTests.indexesOnlyPublicMapsAndSupportsSafeFilters`
+  - Visibility update: `MapPersistenceService.updateMap`
+  - Search tests: `SearchApiIntegrationTests.indexesOnlyPublicMapsAndSupportsSafeFilters`
+  - Reindex tests: `SearchApiIntegrationTests.reindexesPublicMapsFromPostgresAndDropsStalePrivateDocuments`
 
-## 21. Public Map Appears In Elasticsearch Search
+## 23. Elasticsearch Reindex
 
-- Purpose: Confirm public maps are searchable through the safe search API.
-- Prerequisites: A map has been published and Elasticsearch is healthy.
-- Steps:
-  - Open `/search`.
-  - Search by title, feature, or living stats.
-  - API check:
-
-```powershell
-Invoke-RestMethod "$api/api/search/maps?keyword=<public-title>"
-Invoke-RestMethod "$api/api/search/maps?features=forests,roads"
-Invoke-RestMethod "$api/api/search/maps?minCreatureCount=1&minReachableAreaRatio=0.5"
-```
-
-- Expected Result: The public map appears in results. No raw Elasticsearch query is accepted.
-- If Fails Check:
-  - UI: `apps/web/src/pages/SearchPage.tsx`
-  - API: `GET /api/search/maps`
-  - Parser: `MapSearchRequestParser`
-  - ES client: `HttpMapSearchIndexClient`
-
-## 22. Elasticsearch Reindex
-
-- Purpose: Confirm the search index can be rebuilt from PostgreSQL public maps.
-- Prerequisites: API is running with `WORLD_FORGE_ADMIN_ENABLED=true` and `WORLD_FORGE_ADMIN_TOKEN` set.
+- Prerequisites: API is running with `WORLD_FORGE_ADMIN_ENABLED=true`; `WORLD_FORGE_ADMIN_TOKEN` is set; PostgreSQL contains public and private maps.
 - Steps:
 
 ```powershell
@@ -436,30 +460,31 @@ Invoke-RestMethod -Method Post "$api/api/admin/search/maps/reindex" -Headers @{
 }
 ```
 
-- Expected Result: Response includes `indexName`, `publicProjects`, `indexedDocuments`, `skippedProjects`, and `rebuiltAt`.
+- Expected Result: Response includes `indexName`, `publicProjects`, `indexedDocuments`, `skippedProjects`, and `rebuiltAt`. Only public maps are indexed.
 - If Fails Check:
   - API: `POST /api/admin/search/maps/reindex`
-  - Controller: `AdminSearchController`
-  - Service: `MapSearchReindexService`
-  - ES client: `MapSearchIndexClient.replaceAll`
+  - Controller: `apps/api/src/main/java/com/worldforge/api/controller/AdminSearchController.java`
+  - Service: `apps/api/src/main/java/com/worldforge/api/search/MapSearchReindexService.java`
+  - Index client: `MapSearchIndexClient.replaceAll`
 
-## 23. Search Results Persist After Reindex
+## 24. Search After Reindex
 
-- Purpose: Confirm public search results remain available after reindex and stale private documents are removed.
-- Prerequisites: Reindex has completed successfully.
+- Prerequisites: Reindex completed successfully.
 - Steps:
-  - Search again for the public map title.
+  - Search again for a public map title.
   - Search again for a private map title.
+  - Optional API check:
 
 ```powershell
 Invoke-RestMethod "$api/api/search/maps?keyword=<public-title>"
 Invoke-RestMethod "$api/api/search/maps?keyword=<private-title>"
 ```
 
-- Expected Result: Public map still appears; private map does not appear.
+- Expected Result: Public map still appears; private map does not appear; facets remain populated from public documents.
 - If Fails Check:
-  - Reindex source query: `MapProjectRepository.findByVisibilityOrderByUpdatedAtDesc`
+  - Source query: `MapProjectRepository.findByVisibilityOrderByUpdatedAtDesc`
   - Reindex service: `MapSearchReindexService.reindexPublicMaps`
+  - ES replacement: `HttpMapSearchIndexClient.replaceAll`
   - Tests: `SearchApiIntegrationTests.reindexesPublicMapsFromPostgresAndDropsStalePrivateDocuments`
 
 ## Final Automated Checks
