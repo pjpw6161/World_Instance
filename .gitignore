@@ -22,6 +22,8 @@ apps/web/public/wasm/*.map
 .env
 .env.*
 !.env.example
+!.env.local.example
+!.env.production.example
 
 # IDE / OS
 .idea/

@@ -276,16 +276,28 @@ GET /api/search/maps/{projectId}/similar
 
 ## Environment Variables
 
+Environment templates live at the repository root:
+
+```txt
+.env.local.example
+.env.production.example
+```
+
+Use `.env.local.example` for local development and local Docker Compose validation. Use `.env.production.example` as a deployment checklist only; replace every production placeholder through your deployment platform or secret manager.
+
 Frontend build-time variables:
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | No | API origin for browser requests. Leave unset for same-origin `/api` calls. |
+| `VITE_WEB_PORT` | No | Frontend dev/static host port used by local/deployment scripts. Current Vite default is `5173` unless a command passes `--port`. |
 
 Spring Boot runtime variables:
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
+| `SPRING_PROFILES_ACTIVE` | No | unset | Runtime profile marker such as `local` or `production`. |
+| `SERVER_PORT` | No | `8080` | Spring Boot HTTP port. |
 | `WORLD_FORGE_DB_URL` | Yes | `jdbc:postgresql://localhost:5432/world_forge` | PostgreSQL JDBC URL. |
 | `WORLD_FORGE_DB_USER` | Yes | `world_forge` | PostgreSQL username. |
 | `WORLD_FORGE_DB_PASSWORD` | Yes | `world_forge_dev` | PostgreSQL password. |
@@ -301,9 +313,20 @@ Spring Boot runtime variables:
 | `WORLD_FORGE_JWT_TTL_SECONDS` | Yes | `3600` | Access token lifetime in seconds. |
 | `WORLD_FORGE_CORS_ALLOWED_ORIGINS` | Required for cross-origin frontend | empty | Comma-separated allowed frontend origins. |
 
+WASM artifact path:
+
+```txt
+/wasm/world_forge_engine.js
+/wasm/world_forge_engine.wasm
+```
+
+The current frontend does not read an environment variable for the WASM artifact path. Build with `npm run wasm:build` and serve the files above from the deployed frontend origin.
+
 Recommended production values:
 
 ```txt
+SPRING_PROFILES_ACTIVE=production
+SERVER_PORT=8080
 WORLD_FORGE_JPA_DDL_AUTO=validate
 WORLD_FORGE_FLYWAY_ENABLED=true
 WORLD_FORGE_SEARCH_ENABLED=true

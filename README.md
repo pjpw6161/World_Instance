@@ -80,11 +80,20 @@ Install JavaScript workspaces:
 npm install
 ```
 
+Review the local environment contract:
+
+```powershell
+Get-Content .env.local.example
+docker compose --env-file .env.local.example -f infra/docker-compose.yml config
+```
+
+The local example documents PostgreSQL, Elasticsearch, JWT, CORS, admin reindex, API port, web port, and `VITE_API_BASE_URL`. It uses safe development placeholders only. Do not put real secrets in example files.
+
 Start PostgreSQL and Elasticsearch:
 
 ```powershell
-docker compose -f infra/docker-compose.yml up -d postgres elasticsearch
-docker compose -f infra/docker-compose.yml ps
+docker compose --env-file .env.local.example -f infra/docker-compose.yml up -d postgres elasticsearch
+docker compose --env-file .env.local.example -f infra/docker-compose.yml ps
 ```
 
 Local schema setup is handled by Flyway migrations with `WORLD_FORGE_JPA_DDL_AUTO=validate` by default. Start PostgreSQL before booting the API so Flyway can create the MVP tables.
@@ -110,6 +119,8 @@ Run the API:
 cd apps/api
 .\gradlew.bat bootRun
 ```
+
+The API has local defaults in `application.properties`. To override them, export values from `.env.local.example` in your shell before running `bootRun`; for production, use `.env.production.example` only as a checklist and inject real values through the deployment platform or secret manager.
 
 Create a local user and token before calling protected map/world endpoints:
 
@@ -163,7 +174,7 @@ Rebuild the search index from PostgreSQL public maps:
 
 ```powershell
 $env:WORLD_FORGE_ADMIN_ENABLED="true"
-$env:WORLD_FORGE_ADMIN_TOKEN="local-admin-token"
+$env:WORLD_FORGE_ADMIN_TOKEN="local-admin-token-change-me"
 cd apps/api
 .\gradlew.bat bootRun
 ```
@@ -172,7 +183,7 @@ Then call:
 
 ```powershell
 Invoke-RestMethod -Method Post http://localhost:8080/api/admin/search/maps/reindex -Headers @{
-  "X-World-Forge-Admin-Token" = "local-admin-token"
+  "X-World-Forge-Admin-Token" = "local-admin-token-change-me"
 }
 ```
 
