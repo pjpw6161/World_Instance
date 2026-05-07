@@ -1,0 +1,65 @@
+services:
+  postgres:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  elasticsearch:
+    ports: !reset []
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: world-forge-api
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      WORLD_FORGE_DB_URL: jdbc:postgresql://postgres:5432/world_forge
+      WORLD_FORGE_DB_USER: ${WORLD_FORGE_DB_USER:-world_forge}
+      WORLD_FORGE_DB_PASSWORD: ${WORLD_FORGE_DB_PASSWORD:-world_forge_dev}
+      WORLD_FORGE_JPA_DDL_AUTO: ${WORLD_FORGE_JPA_DDL_AUTO:-validate}
+      WORLD_FORGE_FLYWAY_ENABLED: ${WORLD_FORGE_FLYWAY_ENABLED:-true}
+      WORLD_FORGE_ELASTICSEARCH_URL: http://elasticsearch:9200
+      WORLD_FORGE_SEARCH_ENABLED: ${WORLD_FORGE_SEARCH_ENABLED:-true}
+      WORLD_FORGE_SEARCH_INDEX_NAME: ${WORLD_FORGE_SEARCH_INDEX_NAME:-world_forge_maps}
+      WORLD_FORGE_ADMIN_ENABLED: ${WORLD_FORGE_ADMIN_ENABLED:-true}
+      WORLD_FORGE_ADMIN_TOKEN: ${WORLD_FORGE_ADMIN_TOKEN:-local-admin-token-change-me}
+      WORLD_FORGE_JWT_SECRET: ${WORLD_FORGE_JWT_SECRET:-local-dev-change-me-32-byte-placeholder}
+      WORLD_FORGE_JWT_ISSUER: ${WORLD_FORGE_JWT_ISSUER:-world-forge-api-local}
+      WORLD_FORGE_JWT_TTL_SECONDS: ${WORLD_FORGE_JWT_TTL_SECONDS:-3600}
+      WORLD_FORGE_CORS_ALLOWED_ORIGINS: ${WORLD_FORGE_CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${SERVER_PORT:-8080}/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:${SERVER_PORT:-8080}
+    container_name: world-forge-web
+    ports:
+      - "${VITE_WEB_PORT:-5173}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

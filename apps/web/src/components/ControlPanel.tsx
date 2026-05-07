@@ -12,22 +12,53 @@ import {
   withParam,
   withSeed,
 } from "../editor/editorState";
+import type { SampleWorldPreset } from "../editor/sampleWorlds";
+import { algorithmLabel } from "../i18n/korean";
 
 interface ControlPanelProps {
   recipe: GenerationRecipe;
   isGenerating: boolean;
+  samplePresets?: readonly SampleWorldPreset[];
   onRecipeChange: (recipe: GenerationRecipe) => void;
   onGenerate: () => void;
+  onSampleSelect?: (preset: SampleWorldPreset) => void;
 }
 
-export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate }: ControlPanelProps) {
+export function ControlPanel({
+  recipe,
+  isGenerating,
+  samplePresets = [],
+  onRecipeChange,
+  onGenerate,
+  onSampleSelect,
+}: ControlPanelProps) {
   return (
-    <aside className="control-panel" aria-label="Map recipe controls">
+    <aside className="control-panel" aria-label="세계 설계 패널">
+      {samplePresets.length > 0 ? (
+        <section className="control-section sample-world-section">
+          <h2>샘플 세계</h2>
+          <p>포트폴리오 데모용으로 성격이 뚜렷한 설계를 바로 불러옵니다.</p>
+          <div className="sample-world-list">
+            {samplePresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="sample-world-button"
+                onClick={() => onSampleSelect?.(preset)}
+              >
+                <strong>{preset.title}</strong>
+                <span>{preset.tagline}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="control-section">
-        <h2>Map</h2>
+        <h2>세계 크기</h2>
         <div className="control-grid two-col">
           <label>
-            <span>Width</span>
+            <span>너비</span>
             <select
               value={recipe.width}
               onChange={(event) => onRecipeChange(withMapSize(recipe, Number(event.target.value), recipe.height))}
@@ -40,7 +71,7 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
             </select>
           </label>
           <label>
-            <span>Height</span>
+            <span>높이</span>
             <select
               value={recipe.height}
               onChange={(event) => onRecipeChange(withMapSize(recipe, recipe.width, Number(event.target.value)))}
@@ -54,7 +85,7 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
           </label>
         </div>
         <label className="seed-row">
-          <span>Seed</span>
+          <span>시드</span>
           <span className="seed-inputs">
             <input
               type="number"
@@ -64,14 +95,14 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
               onChange={(event) => onRecipeChange(withSeed(recipe, Number(event.target.value)))}
             />
             <button type="button" className="secondary-button" onClick={() => onRecipeChange(withSeed(recipe, createRandomSeed()))}>
-              Random
+              새 시드
             </button>
           </span>
         </label>
       </section>
 
       <section className="control-section">
-        <h2>Features</h2>
+        <h2>세계 요소</h2>
         <div className="feature-grid">
           {featureOptions.map((feature) => (
             <label key={feature.key} className="checkbox-row">
@@ -87,27 +118,27 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
       </section>
 
       <section className="control-section">
-        <h2>Algorithms</h2>
+        <h2>생성 알고리즘</h2>
         <AlgorithmSelect<"terrain">
-          label="Terrain"
+          label="지형 알고리즘"
           value={recipe.algorithms.terrain}
           options={algorithmOptions.terrain}
           onChange={(value) => onRecipeChange(withAlgorithm(recipe, "terrain", value))}
         />
         <AlgorithmSelect<"cave">
-          label="Cave"
+          label="동굴 알고리즘"
           value={recipe.algorithms.cave}
           options={algorithmOptions.cave}
           onChange={(value) => onRecipeChange(withAlgorithm(recipe, "cave", value))}
         />
         <AlgorithmSelect<"road">
-          label="Road"
+          label="도로 알고리즘"
           value={recipe.algorithms.road}
           options={algorithmOptions.road}
           onChange={(value) => onRecipeChange(withAlgorithm(recipe, "road", value))}
         />
         <AlgorithmSelect<"objectPlacement">
-          label="Objects"
+          label="오브젝트 배치 알고리즘"
           value={recipe.algorithms.objectPlacement}
           options={algorithmOptions.objectPlacement}
           onChange={(value) => onRecipeChange(withAlgorithm(recipe, "objectPlacement", value))}
@@ -115,7 +146,7 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
       </section>
 
       <section className="control-section">
-        <h2>Parameters</h2>
+        <h2>성격 조율</h2>
         {paramOptions.map((param) => (
           <label key={param.key} className="range-row">
             <span>
@@ -135,7 +166,7 @@ export function ControlPanel({ recipe, isGenerating, onRecipeChange, onGenerate 
       </section>
 
       <button type="button" className="generate-button" onClick={onGenerate} disabled={isGenerating}>
-        {isGenerating ? "Generating" : "Generate"}
+        {isGenerating ? "세계 빚는 중" : "세계 빚기"}
       </button>
     </aside>
   );
@@ -160,7 +191,7 @@ function AlgorithmSelect<K extends keyof AlgorithmSelection>({
       <select value={value} onChange={(event) => onChange(event.target.value as AlgorithmSelection[K])}>
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {algorithmLabel(String(option))}
           </option>
         ))}
       </select>

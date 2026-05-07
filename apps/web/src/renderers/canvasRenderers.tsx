@@ -19,17 +19,17 @@ const terrainColors: Record<TerrainType, readonly [number, number, number]> = {
 
 export function TerrainMapView({ mapData }: MapRendererProps) {
   const canvasRef = useCanvasRenderer(mapData, drawTerrainMap);
-  return <canvas ref={canvasRef} className="map-canvas pixelated" aria-label="2D terrain view" />;
+  return <canvas ref={canvasRef} className="map-canvas pixelated" aria-label="2D 대지 지도" />;
 }
 
 export function HeightMapView({ mapData }: MapRendererProps) {
   const canvasRef = useCanvasRenderer(mapData, drawHeightMap);
-  return <canvas ref={canvasRef} className="map-canvas pixelated" aria-label="Height map view" />;
+  return <canvas ref={canvasRef} className="map-canvas pixelated" aria-label="고도 지도" />;
 }
 
 export function SideMapView({ mapData }: MapRendererProps) {
   const canvasRef = useCanvasRenderer(mapData, drawSideView);
-  return <canvas ref={canvasRef} className="map-canvas side-canvas" aria-label="Side view" />;
+  return <canvas ref={canvasRef} className="map-canvas side-canvas" aria-label="단면도" />;
 }
 
 function useCanvasRenderer(

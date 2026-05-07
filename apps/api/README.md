@@ -219,3 +219,44 @@ Focused auth/ownership verification:
 .\gradlew.bat test --tests com.worldforge.api.MapApiIntegrationTests
 .\gradlew.bat test --tests com.worldforge.api.WorldInstanceApiIntegrationTests
 ```
+
+## Docker image
+
+The API image uses a Java 21 multi-stage build and runs the Spring Boot `bootJar`.
+
+Build from the repository root with `apps/api` as the Docker build context:
+
+```powershell
+docker build -f apps/api/Dockerfile -t world-forge-api:local apps/api
+```
+
+Run against the local PostgreSQL and Elasticsearch services started from `infra/docker-compose.yml`:
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d postgres elasticsearch
+
+docker run --rm --name world-forge-api `
+  --network world-forge_default `
+  -p 8080:8080 `
+  -e SERVER_PORT=8080 `
+  -e WORLD_FORGE_DB_URL="jdbc:postgresql://postgres:5432/world_forge" `
+  -e WORLD_FORGE_DB_USER="world_forge" `
+  -e WORLD_FORGE_DB_PASSWORD="world_forge_dev" `
+  -e WORLD_FORGE_ELASTICSEARCH_URL="http://elasticsearch:9200" `
+  -e WORLD_FORGE_JWT_SECRET="local-dev-change-me-32-byte-placeholder" `
+  -e WORLD_FORGE_CORS_ALLOWED_ORIGINS="http://localhost:5173" `
+  world-forge-api:local
+```
+
+The container listens on `SERVER_PORT` internally. The example above maps host port `8080` to container port `8080`. The image healthcheck calls:
+
+```txt
+GET /api/health
+```
+
+Container-specific notes:
+
+- Use `jdbc:postgresql://postgres:5432/world_forge` when the container joins the `world-forge_default` compose network.
+- Use `http://elasticsearch:9200` when the container joins the same compose network.
+- Inject production secrets through the deployment platform; do not bake them into the image.
+- The API container is a data/service server only. It does not generate maps and does not run World Instance simulation ticks.

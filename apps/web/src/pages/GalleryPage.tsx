@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { AuthStatus } from "../components/AuthStatus";
+import { algorithmLabel, appName, featureLabel, formatKoreanDate, mapTypeLabel } from "../i18n/korean";
 import {
   createWorldInstance,
   fetchMapProject,
@@ -21,10 +22,10 @@ const terrainAlgorithms = ["noise-island", "radial-island"] as const;
 const caveAlgorithms = ["cellular-automata", "random-walk"] as const;
 const roadAlgorithms = ["astar", "simple-path"] as const;
 const sortChoices = [
-  { value: "newest", label: "Newest" },
-  { value: "popular", label: "Popular" },
-  { value: "mostCreatures", label: "Most creatures" },
-  { value: "mostExplorable", label: "Most explorable" },
+  { value: "newest", label: "새로 태어난 순" },
+  { value: "popular", label: "많이 열린 순" },
+  { value: "mostCreatures", label: "생명체 많은 순" },
+  { value: "mostExplorable", label: "탐험지 넓은 순" },
 ] as const;
 
 type FeatureName = (typeof featureChoices)[number];
@@ -117,7 +118,7 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
       setResults(nextResults);
       setStatus("idle");
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Search failed");
+      setError(unknownError instanceof Error ? unknownError.message : "공개 지도장을 뒤지지 못했습니다");
       setStatus("error");
     }
   }, []);
@@ -136,23 +137,37 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
   }, [query, runSearch]);
 
   useEffect(() => {
-    if (!detailProjectId) {
-      setDetail(null);
-      setDetailStatus("idle");
-      return;
-    }
-    setDetailStatus("loading");
-    setError(null);
-    void fetchMapProject(detailProjectId)
-      .then((project) => {
-        setDetail(project);
-        setDetailStatus("idle");
-      })
-      .catch((unknownError) => {
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!detailProjectId) {
         setDetail(null);
-        setDetailStatus("error");
-        setError(unknownError instanceof Error ? unknownError.message : "Could not load map detail");
-      });
+        setDetailStatus("idle");
+        return;
+      }
+      setDetailStatus("loading");
+      setError(null);
+      void fetchMapProject(detailProjectId)
+        .then((project) => {
+          if (cancelled) {
+            return;
+          }
+          setDetail(project);
+          setDetailStatus("idle");
+        })
+        .catch((unknownError) => {
+          if (cancelled) {
+            return;
+          }
+          setDetail(null);
+          setDetailStatus("error");
+          setError(unknownError instanceof Error ? unknownError.message : "지도 상세 기록을 불러오지 못했습니다");
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
   }, [detailProjectId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -186,7 +201,7 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
 
   async function forkAndOpen(result: MapSearchResultPayload) {
     if (!getStoredAuthToken()) {
-      setError("Sign in before opening a public map as a world");
+      setError("공개 지도를 세계로 열려면 먼저 로그인해주세요");
       setActionStatus("error");
       return;
     }
@@ -195,7 +210,7 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
     try {
       const forked = await forkMapProject(result.projectId);
       if (!forked.currentVersionId) {
-        throw new Error("Forked map has no version");
+        throw new Error("복제한 지도에 버전이 없습니다");
       }
       const world = await createWorldInstance({
         mapVersionId: forked.currentVersionId,
@@ -203,7 +218,7 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
       });
       window.location.assign(`/world/${encodeURIComponent(world.worldInstance.id)}`);
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Could not open public map");
+      setError(unknownError instanceof Error ? unknownError.message : "공개 지도를 열지 못했습니다");
       setActionStatus("error");
     }
   }
@@ -212,43 +227,52 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
     <main className="editor-shell">
       <header className="editor-header">
         <div>
-          <p>World Forge</p>
-          <h1>Gallery</h1>
+          <p>{appName}</p>
+          <h1>공개 탐험관</h1>
         </div>
-        <nav className="top-nav" aria-label="Navigation">
+        <nav className="top-nav" aria-label="이동">
+          <a className="text-link" href="/portfolio">
+            포트폴리오
+          </a>
           <a className="text-link" href="/editor">
-            Editor
+            창조실
+          </a>
+          <a className="text-link" href="/compare">
+            비교실
+          </a>
+          <a className="text-link" href="/determinism">
+            결정성
           </a>
           <a className="text-link" href="/dashboard">
-            Dashboard
+            내 세계
           </a>
           <a className="text-link" href="/gallery">
-            Gallery
+            탐험관
           </a>
           <AuthStatus />
         </nav>
       </header>
 
-      <section className="gallery-shell" aria-label="Public map gallery">
+      <section className="gallery-shell" aria-label="공개 지도 탐험관">
         <form className="gallery-filter-panel" onSubmit={onSubmit}>
           <div className="gallery-filter-row primary">
             <label>
-              <span>Keyword</span>
+              <span>검색어</span>
               <input type="search" value={filters.keyword} onChange={updateTextFilter("keyword")} />
             </label>
             <label>
-              <span>Map type</span>
+              <span>지도 성격</span>
               <select value={filters.mapType} onChange={updateTextFilter("mapType")}>
-                <option value="">Any</option>
+                <option value="">전체</option>
                 {mapTypeChoices.map((choice) => (
                   <option key={choice} value={choice}>
-                    {choice}
+                    {mapTypeLabel(choice)}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              <span>Sort</span>
+              <span>정렬</span>
               <select value={filters.sort} onChange={updateSort}>
                 {sortChoices.map((choice) => (
                   <option key={choice.value} value={choice.value}>
@@ -258,57 +282,57 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
               </select>
             </label>
             <button type="submit" className="generate-button" disabled={status === "loading"}>
-              Search
+              찾아보기
             </button>
             <button type="button" className="secondary-button" onClick={clearFilters}>
-              Reset
+              초기화
             </button>
           </div>
 
           <fieldset className="gallery-filter-group">
-            <legend>Features</legend>
+            <legend>세계 요소</legend>
             <div className="gallery-checkbox-grid">
               {featureChoices.map((feature) => (
                 <label key={feature} className="checkbox-row">
                   <input type="checkbox" checked={filters.features[feature]} onChange={() => toggleFeature(feature)} />
-                  <span>{feature}</span>
+                  <span>{featureLabel(feature)}</span>
                 </label>
               ))}
             </div>
           </fieldset>
 
           <fieldset className="gallery-filter-group">
-            <legend>Algorithms</legend>
+            <legend>생성 알고리즘</legend>
             <div className="gallery-filter-row">
               <label>
-                <span>Terrain</span>
+                <span>지형 알고리즘</span>
                 <select value={filters.terrainAlgorithm} onChange={updateTextFilter("terrainAlgorithm")}>
-                  <option value="">Any</option>
+                  <option value="">전체</option>
                   {terrainAlgorithms.map((choice) => (
                     <option key={choice} value={choice}>
-                      {choice}
+                      {algorithmLabel(choice)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Cave</span>
+                <span>동굴 알고리즘</span>
                 <select value={filters.caveAlgorithm} onChange={updateTextFilter("caveAlgorithm")}>
-                  <option value="">Any</option>
+                  <option value="">전체</option>
                   {caveAlgorithms.map((choice) => (
                     <option key={choice} value={choice}>
-                      {choice}
+                      {algorithmLabel(choice)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Road</span>
+                <span>도로 알고리즘</span>
                 <select value={filters.roadAlgorithm} onChange={updateTextFilter("roadAlgorithm")}>
-                  <option value="">Any</option>
+                  <option value="">전체</option>
                   {roadAlgorithms.map((choice) => (
                     <option key={choice} value={choice}>
-                      {choice}
+                      {algorithmLabel(choice)}
                     </option>
                   ))}
                 </select>
@@ -317,31 +341,31 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
           </fieldset>
 
           <fieldset className="gallery-filter-group">
-            <legend>Size</legend>
+            <legend>지도 크기</legend>
             <div className="gallery-filter-row compact">
-              <NumberFilter label="Min width" value={filters.minWidth} onChange={updateTextFilter("minWidth")} />
-              <NumberFilter label="Max width" value={filters.maxWidth} onChange={updateTextFilter("maxWidth")} />
-              <NumberFilter label="Min height" value={filters.minHeight} onChange={updateTextFilter("minHeight")} />
-              <NumberFilter label="Max height" value={filters.maxHeight} onChange={updateTextFilter("maxHeight")} />
+              <NumberFilter label="최소 너비" value={filters.minWidth} onChange={updateTextFilter("minWidth")} />
+              <NumberFilter label="최대 너비" value={filters.maxWidth} onChange={updateTextFilter("maxWidth")} />
+              <NumberFilter label="최소 높이" value={filters.minHeight} onChange={updateTextFilter("minHeight")} />
+              <NumberFilter label="최대 높이" value={filters.maxHeight} onChange={updateTextFilter("maxHeight")} />
             </div>
           </fieldset>
 
           <fieldset className="gallery-filter-group">
-            <legend>Stats</legend>
+            <legend>지형 수치</legend>
             <div className="gallery-filter-row compact">
-              <NumberFilter label="Min forest" value={filters.minForestRatio} step={0.05} onChange={updateTextFilter("minForestRatio")} />
-              <NumberFilter label="Min mountain" value={filters.minMountainRatio} step={0.05} onChange={updateTextFilter("minMountainRatio")} />
-              <NumberFilter label="Min water" value={filters.minWaterRatio} step={0.05} onChange={updateTextFilter("minWaterRatio")} />
-              <NumberFilter label="Min land" value={filters.minLandRatio} step={0.05} onChange={updateTextFilter("minLandRatio")} />
+              <NumberFilter label="숲 최소" value={filters.minForestRatio} step={0.05} onChange={updateTextFilter("minForestRatio")} />
+              <NumberFilter label="산악 최소" value={filters.minMountainRatio} step={0.05} onChange={updateTextFilter("minMountainRatio")} />
+              <NumberFilter label="물 최소" value={filters.minWaterRatio} step={0.05} onChange={updateTextFilter("minWaterRatio")} />
+              <NumberFilter label="육지 최소" value={filters.minLandRatio} step={0.05} onChange={updateTextFilter("minLandRatio")} />
             </div>
           </fieldset>
 
           <fieldset className="gallery-filter-group">
-            <legend>Living stats</legend>
+            <legend>살아 있는 세계</legend>
             <div className="gallery-filter-row compact">
-              <NumberFilter label="Min creatures" value={filters.minCreatureCount} onChange={updateTextFilter("minCreatureCount")} />
-              <NumberFilter label="Min reachable" value={filters.minReachableAreaRatio} step={0.05} onChange={updateTextFilter("minReachableAreaRatio")} />
-              <NumberFilter label="Min portals" value={filters.minPortalCount} onChange={updateTextFilter("minPortalCount")} />
+              <NumberFilter label="생명체 최소" value={filters.minCreatureCount} onChange={updateTextFilter("minCreatureCount")} />
+              <NumberFilter label="탐험 가능 최소" value={filters.minReachableAreaRatio} step={0.05} onChange={updateTextFilter("minReachableAreaRatio")} />
+              <NumberFilter label="문 최소" value={filters.minPortalCount} onChange={updateTextFilter("minPortalCount")} />
             </div>
           </fieldset>
         </form>
@@ -349,25 +373,25 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
         {error ? <p className="error-line">{error}</p> : null}
 
         <div className="gallery-layout">
-          <aside className="gallery-facets" aria-label="Search facets">
-            <FacetSection title="Map type" buckets={facets?.mapTypes} />
-            <FacetSection title="Features" buckets={facets?.features} />
-            <FacetSection title="Terrain algorithms" buckets={facets?.terrainAlgorithms} />
-            <FacetSection title="Cave algorithms" buckets={facets?.caveAlgorithms} />
-            <FacetSection title="Road algorithms" buckets={facets?.roadAlgorithms} />
+          <aside className="gallery-facets" aria-label="검색 갈래">
+            <FacetSection title="지도 성격" buckets={facets?.mapTypes} formatter={mapTypeLabel} />
+            <FacetSection title="세계 요소" buckets={facets?.features} formatter={featureLabel} />
+            <FacetSection title="지형 알고리즘" buckets={facets?.terrainAlgorithms} formatter={algorithmLabel} />
+            <FacetSection title="동굴 알고리즘" buckets={facets?.caveAlgorithms} formatter={algorithmLabel} />
+            <FacetSection title="도로 알고리즘" buckets={facets?.roadAlgorithms} formatter={algorithmLabel} />
           </aside>
 
-          <section className="gallery-results" aria-label="Search results">
+          <section className="gallery-results" aria-label="검색 결과">
             <div className="gallery-result-toolbar">
               <span className="status-pill">
-                {status === "loading" ? "loading" : actionStatus === "forking" ? "forking" : `${results?.total ?? 0} maps`}
+                {status === "loading" ? "불러오는 중" : actionStatus === "forking" ? "복제 중" : `${results?.total ?? 0}개 지도`}
               </span>
               <span>{filterSummary(filters)}</span>
             </div>
 
-            {status === "error" ? <div className="gallery-state">Search failed.</div> : null}
-            {status === "loading" && !results ? <div className="gallery-state">Loading public maps...</div> : null}
-            {status !== "loading" && results?.results.length === 0 ? <div className="gallery-state">No public maps match these filters.</div> : null}
+            {status === "error" ? <div className="gallery-state">탐험관 검색에 실패했습니다.</div> : null}
+            {status === "loading" && !results ? <div className="gallery-state">공개 지도를 불러오는 중...</div> : null}
+            {status !== "loading" && results?.results.length === 0 ? <div className="gallery-state">조건에 맞는 공개 지도가 없습니다.</div> : null}
 
             <div className="gallery-grid">
               {results?.results.map((result) => (
@@ -377,12 +401,12 @@ export function GalleryPage({ detailProjectId }: GalleryPageProps) {
           </section>
 
           {detailProjectId ? (
-            <aside className="gallery-detail" aria-label="Map detail">
+            <aside className="gallery-detail" aria-label="지도 상세">
               <a className="text-link" href="/gallery">
-                Back to gallery
+                탐험관으로 돌아가기
               </a>
-              {detailStatus === "loading" ? <div className="gallery-state">Loading map detail...</div> : null}
-              {detailStatus === "error" ? <div className="gallery-state">Map detail is unavailable.</div> : null}
+              {detailStatus === "loading" ? <div className="gallery-state">지도 기록을 불러오는 중...</div> : null}
+              {detailStatus === "error" ? <div className="gallery-state">지도 기록을 볼 수 없습니다.</div> : null}
               {detail ? <MapDetail project={detail} /> : null}
             </aside>
           ) : null}
@@ -416,7 +440,7 @@ function MapResultCard({ result, onOpen, busy }: { result: MapSearchResultPayloa
           <img src={result.thumbnailUrl} alt={`${result.title} thumbnail`} loading="lazy" />
         ) : (
           <div>
-            <strong>{result.mapType}</strong>
+            <strong>{mapTypeLabel(result.mapType)}</strong>
             <span>{result.mapHash.slice(0, 10)}</span>
           </div>
         )}
@@ -424,33 +448,33 @@ function MapResultCard({ result, onOpen, busy }: { result: MapSearchResultPayloa
       <div className="gallery-card-body">
         <div>
           <h2>{result.title}</h2>
-          <p>{result.description || result.mapType}</p>
+          <p>{result.description || mapTypeLabel(result.mapType)}</p>
         </div>
         <dl className="gallery-card-meta">
-          <MetaItem label="Type" value={result.mapType} />
-          <MetaItem label="Size" value={`${result.width} x ${result.height}`} />
-          <MetaItem label="Owner" value={result.ownerNickname || "Unknown"} />
-          <MetaItem label="Created" value={formatDate(result.createdAt)} />
+          <MetaItem label="성격" value={mapTypeLabel(result.mapType)} />
+          <MetaItem label="크기" value={`${result.width} x ${result.height}`} />
+          <MetaItem label="기록자" value={result.ownerNickname || "알 수 없음"} />
+          <MetaItem label="공개일" value={formatDate(result.createdAt)} />
         </dl>
-        <ChipRow items={result.features} fallback="No features" />
+        <ChipRow items={result.features.map(featureLabel)} fallback="표시된 요소 없음" />
         <div className="gallery-stat-row">
-          <span>Forest {formatRatio(result.stats.forestRatio)}</span>
-          <span>Mountain {formatRatio(result.stats.mountainRatio)}</span>
-          <span>Water {formatRatio(result.stats.waterRatio)}</span>
-          <span>Land {formatRatio(result.stats.landRatio)}</span>
+          <span>숲 {formatRatio(result.stats.forestRatio)}</span>
+          <span>산악 {formatRatio(result.stats.mountainRatio)}</span>
+          <span>물 {formatRatio(result.stats.waterRatio)}</span>
+          <span>육지 {formatRatio(result.stats.landRatio)}</span>
         </div>
         <div className="gallery-stat-row">
-          <span>Creatures {formatNumber(result.livingStats.creatureCount)}</span>
-          <span>Reachable {formatRatio(result.livingStats.reachableAreaRatio)}</span>
-          <span>Portals {formatNumber(result.livingStats.portalCount)}</span>
+          <span>생명체 {formatNumber(result.livingStats.creatureCount)}</span>
+          <span>탐험 가능 {formatRatio(result.livingStats.reachableAreaRatio)}</span>
+          <span>문 {formatNumber(result.livingStats.portalCount)}</span>
         </div>
       </div>
       <div className="gallery-card-actions">
         <a className="secondary-button text-button" href={`/maps/${encodeURIComponent(result.projectId)}`}>
-          Details
+          상세 기록
         </a>
         <button type="button" className="generate-button" onClick={onOpen} disabled={busy}>
-          Fork & Open
+          내 세계로 열기
         </button>
       </div>
     </article>
@@ -462,19 +486,19 @@ function MapDetail({ project }: { project: MapProjectPayload }) {
   return (
     <div className="gallery-detail-panel">
       <h2>{project.title}</h2>
-      <p>{project.description || "No description"}</p>
+      <p>{project.description || "아직 남긴 기록이 없습니다"}</p>
       <dl className="gallery-card-meta stacked">
-        <MetaItem label="Map hash" value={version?.mapHash ?? "No version"} />
-        <MetaItem label="Size" value={version ? `${version.width} x ${version.height}` : "No version"} />
-        <MetaItem label="Engine" value={version?.engineVersion ?? "No version"} />
-        <MetaItem label="Created" value={formatDate(project.createdAt)} />
+        <MetaItem label="지도 인장값" value={version?.mapHash ?? "버전 없음"} />
+        <MetaItem label="크기" value={version ? `${version.width} x ${version.height}` : "버전 없음"} />
+        <MetaItem label="엔진" value={version?.engineVersion ?? "버전 없음"} />
+        <MetaItem label="공개일" value={formatDate(project.createdAt)} />
       </dl>
       {version ? (
         <div className="gallery-stat-row vertical">
-          <span>Forest {formatRatio(numberStat(version.stats, "forestRatio"))}</span>
-          <span>Mountain {formatRatio(numberStat(version.stats, "mountainRatio"))}</span>
-          <span>Water {formatRatio(numberStat(version.stats, "waterRatio"))}</span>
-          <span>Land {formatRatio(numberStat(version.stats, "landRatio"))}</span>
+          <span>숲 {formatRatio(numberStat(version.stats, "forestRatio"))}</span>
+          <span>산악 {formatRatio(numberStat(version.stats, "mountainRatio"))}</span>
+          <span>물 {formatRatio(numberStat(version.stats, "waterRatio"))}</span>
+          <span>육지 {formatRatio(numberStat(version.stats, "landRatio"))}</span>
         </div>
       ) : null}
     </div>
@@ -503,18 +527,18 @@ function ChipRow({ items, fallback }: { items: readonly string[]; fallback: stri
   );
 }
 
-function FacetSection({ title, buckets }: { title: string; buckets?: readonly FacetBucketPayload[] }) {
+function FacetSection({ title, buckets, formatter = (value: string) => value }: { title: string; buckets?: readonly FacetBucketPayload[]; formatter?: (value: string) => string }) {
   const visibleBuckets = buckets?.slice(0, 8) ?? [];
   return (
     <section className="facet-section">
       <h2>{title}</h2>
       {visibleBuckets.length === 0 ? (
-        <p>No values</p>
+        <p>아직 없음</p>
       ) : (
         <ul>
           {visibleBuckets.map((bucket) => (
             <li key={bucket.value}>
-              <span>{bucket.value}</span>
+              <span>{formatter(bucket.value)}</span>
               <strong>{bucket.count}</strong>
             </li>
           ))}
@@ -575,7 +599,7 @@ function numberOrUndefined(value: string): number | undefined {
 
 function formatDate(value: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+    return formatKoreanDate(value, false);
   } catch {
     return value;
   }
@@ -596,9 +620,9 @@ function numberStat(stats: Record<string, unknown>, key: string): number | undef
 
 function filterSummary(filters: GalleryFilters): string {
   const parts = [
-    filters.mapType || "all types",
-    selectedFeatures(filters.features) || "all features",
-    filters.terrainAlgorithm || "any terrain",
+    filters.mapType ? mapTypeLabel(filters.mapType) : "모든 성격",
+    selectedFeatures(filters.features)?.split(",").map(featureLabel).join(", ") || "모든 요소",
+    filters.terrainAlgorithm ? algorithmLabel(filters.terrainAlgorithm) : "모든 지형 알고리즘",
   ];
   return parts.join(" / ");
 }

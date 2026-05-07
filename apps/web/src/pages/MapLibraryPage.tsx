@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AuthStatus } from "../components/AuthStatus";
+import { appName, statusLabel, visibilityLabel } from "../i18n/korean";
 import {
   createWorldInstance,
   getStoredAuthToken,
@@ -19,7 +20,7 @@ export function MapLibraryPage() {
   const loadMaps = useCallback(async () => {
     if (!getStoredAuthToken()) {
       setStatus("error");
-      setError("Sign in required");
+      setError("로그인이 필요합니다");
       return;
     }
     setStatus("loading");
@@ -28,7 +29,7 @@ export function MapLibraryPage() {
       setMaps(await listMyMaps());
       setStatus("ready");
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Could not load maps");
+      setError(unknownError instanceof Error ? unknownError.message : "내 지도를 불러오지 못했습니다");
       setStatus("error");
     }
   }, []);
@@ -48,14 +49,14 @@ export function MapLibraryPage() {
       setMaps((currentMaps) => currentMaps.map((item) => (item.id === updated.id ? updated : item)));
       setStatus("ready");
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Could not update map");
+      setError(unknownError instanceof Error ? unknownError.message : "지도를 갱신하지 못했습니다");
       setStatus("error");
     }
   }
 
   async function openWorld(project: MapProjectPayload) {
     if (!project.currentVersionId) {
-      setError("Map has no version");
+      setError("버전이 없는 지도입니다");
       return;
     }
     setStatus("saving");
@@ -67,7 +68,7 @@ export function MapLibraryPage() {
       });
       window.location.assign(`/world/${encodeURIComponent(world.worldInstance.id)}`);
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Could not create world");
+      setError(unknownError instanceof Error ? unknownError.message : "세계를 열지 못했습니다");
       setStatus("error");
     }
   }
@@ -76,28 +77,34 @@ export function MapLibraryPage() {
     <main className="editor-shell">
       <header className="editor-header">
         <div>
-          <p>World Forge</p>
-          <h1>My Maps</h1>
+          <p>{appName}</p>
+          <h1>내 지도 서가</h1>
         </div>
-        <nav className="top-nav" aria-label="Navigation">
+        <nav className="top-nav" aria-label="이동">
+          <a className="text-link" href="/portfolio">
+            포트폴리오
+          </a>
           <a className="text-link" href="/editor">
-            Editor
+            창조실
+          </a>
+          <a className="text-link" href="/compare">
+            비교실
           </a>
           <a className="text-link" href="/dashboard">
-            Dashboard
+            내 세계
           </a>
           <a className="text-link" href="/gallery">
-            Gallery
+            탐험관
           </a>
           <AuthStatus />
         </nav>
       </header>
 
-      <section className="library-shell" aria-label="Saved maps">
+      <section className="library-shell" aria-label="저장된 지도">
         <div className="library-toolbar">
-          <span className="status-pill">{status}</span>
+          <span className="status-pill">{statusLabel(status)}</span>
           <button type="button" className="secondary-button" onClick={() => void loadMaps()} disabled={status === "loading"}>
-            Refresh
+            새로고침
           </button>
         </div>
         {error ? <p className="error-line">{error}</p> : null}
@@ -106,31 +113,31 @@ export function MapLibraryPage() {
             <article key={project.id} className="map-list-item">
               <div>
                 <h2>{project.title}</h2>
-                <p>{project.description || "No description"}</p>
-                <code>{project.currentVersion?.mapHash ?? "no version"}</code>
+                <p>{project.description || "아직 남긴 기록이 없습니다"}</p>
+                <code>{project.currentVersion?.mapHash ?? "버전 없음"}</code>
               </div>
               <dl className="map-meta">
                 <div>
-                  <dt>Visibility</dt>
-                  <dd>{project.visibility}</dd>
+                  <dt>공개 상태</dt>
+                  <dd>{visibilityLabel(project.visibility)}</dd>
                 </div>
                 <div>
-                  <dt>Size</dt>
+                  <dt>크기</dt>
                   <dd>
                     {project.currentVersion ? `${project.currentVersion.width} x ${project.currentVersion.height}` : "-"}
                   </dd>
                 </div>
                 <div>
-                  <dt>Updated</dt>
+                  <dt>수정</dt>
                   <dd>{new Date(project.updatedAt).toLocaleString()}</dd>
                 </div>
               </dl>
               <div className="map-actions">
                 <a className="secondary-button text-button" href={`/maps/${encodeURIComponent(project.id)}`}>
-                  Details
+                  상세 기록
                 </a>
                 <button type="button" className="generate-button" onClick={() => void openWorld(project)} disabled={!project.currentVersionId || status === "saving"}>
-                  Open World
+                  세계로 들어가기
                 </button>
                 <button
                   type="button"
@@ -138,7 +145,7 @@ export function MapLibraryPage() {
                   onClick={() => void setVisibility(project, project.visibility === "PUBLIC" ? "PRIVATE" : "PUBLIC")}
                   disabled={!project.currentVersionId || status === "saving"}
                 >
-                  {project.visibility === "PUBLIC" ? "Make Private" : "Publish"}
+                  {project.visibility === "PUBLIC" ? "비공개로 돌리기" : "공개하기"}
                 </button>
               </div>
             </article>
@@ -146,7 +153,7 @@ export function MapLibraryPage() {
           {maps.length === 0 && status !== "loading" ? (
             <div className="empty-preview library-empty">
               <a className="text-link" href="/editor">
-                Create a map
+                첫 세계 빚기
               </a>
             </div>
           ) : null}

@@ -30,7 +30,7 @@ export function AuthStatus() {
     return (
       <div className="auth-status">
         <a className="text-link" href="/login">
-          Sign in
+          로그인
         </a>
       </div>
     );
@@ -40,7 +40,7 @@ export function AuthStatus() {
     <div className="auth-status">
       <span>{user.nickname}</span>
       <a className="text-link" href="/maps">
-        My Maps
+        내 지도
       </a>
       <button
         type="button"
@@ -50,7 +50,7 @@ export function AuthStatus() {
           window.location.assign("/login");
         }}
       >
-        Sign out
+        로그아웃
       </button>
     </div>
   );

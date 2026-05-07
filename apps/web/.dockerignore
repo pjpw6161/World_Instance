@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.tmp/
+*.tsbuildinfo
+*.log
+
+# The supported production build command uses the repository root as context:
+# docker build -f apps/web/Dockerfile -t world-forge-web:local .
+# For that command, apps/web/Dockerfile.dockerignore controls the actual context.

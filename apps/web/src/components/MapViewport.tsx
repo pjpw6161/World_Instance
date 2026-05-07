@@ -1,5 +1,6 @@
 import type { MapData, ViewMode } from "@world-forge/shared";
 import { viewModes } from "../editor/editorState";
+import { statusLabel } from "../i18n/korean";
 import { HeightMapView, SideMapView, TerrainMapView } from "../renderers/canvasRenderers";
 
 interface MapViewportProps {
@@ -12,9 +13,9 @@ interface MapViewportProps {
 
 export function MapViewport({ mapData, viewMode, status, error, onViewModeChange }: MapViewportProps) {
   return (
-    <section className="map-workspace" aria-label="Map preview">
+    <section className="map-workspace" aria-label="지도 미리보기">
       <div className="workspace-toolbar">
-        <div className="view-tabs" role="tablist" aria-label="View mode">
+        <div className="view-tabs" role="tablist" aria-label="보기 방식">
           {viewModes.map((mode) => (
             <button
               key={mode.value}
@@ -26,11 +27,11 @@ export function MapViewport({ mapData, viewMode, status, error, onViewModeChange
             </button>
           ))}
         </div>
-        <span className="status-pill">{status}</span>
+        <span className="status-pill">{statusLabel(status)}</span>
       </div>
 
       <div className="canvas-frame">
-        {mapData ? renderMapView(mapData, viewMode) : <div className="empty-preview">Generate a map</div>}
+        {mapData ? renderMapView(mapData, viewMode) : <div className="empty-preview">먼저 세계를 빚어주세요</div>}
       </div>
 
       {error ? <p className="error-line">{error}</p> : null}

@@ -14,18 +14,19 @@ import {
   type GenerationRecipe,
   type ViewMode,
 } from "@world-forge/shared";
+import { featureLabel } from "../i18n/korean";
 
 export const sizeOptions = [64, 128, 256, 512] as const;
 
 export const viewModes: readonly { value: ViewMode; label: string }[] = [
-  { value: "terrain-2d", label: "Terrain" },
-  { value: "height-map", label: "Height" },
-  { value: "side-view", label: "Side" },
+  { value: "terrain-2d", label: "대지 지도" },
+  { value: "height-map", label: "고도 지도" },
+  { value: "side-view", label: "단면도" },
 ];
 
 export const featureOptions: readonly { key: FeatureKey; label: string }[] = FEATURE_KEYS.map((key) => ({
   key,
-  label: toTitle(key),
+  label: featureLabel(key),
 }));
 
 export const algorithmOptions = {
@@ -42,11 +43,11 @@ export const paramOptions: readonly {
   max: number;
   step: number;
 }[] = [
-  { key: "waterLevel", label: "Water", min: 0, max: 1, step: 0.01 },
-  { key: "mountainLevel", label: "Mountain", min: 0, max: 1, step: 0.01 },
-  { key: "forestDensity", label: "Forest", min: 0, max: 1, step: 0.01 },
-  { key: "caveDensity", label: "Cave", min: 0, max: 1, step: 0.01 },
-  { key: "roadComplexity", label: "Road", min: 0, max: 1, step: 0.01 },
+  { key: "waterLevel", label: "수위", min: 0, max: 1, step: 0.01 },
+  { key: "mountainLevel", label: "산세", min: 0, max: 1, step: 0.01 },
+  { key: "forestDensity", label: "숲 밀도", min: 0, max: 1, step: 0.01 },
+  { key: "caveDensity", label: "동굴 밀도", min: 0, max: 1, step: 0.01 },
+  { key: "roadComplexity", label: "길 복잡도", min: 0, max: 1, step: 0.01 },
 ];
 
 export function createInitialRecipe(): GenerationRecipe {
@@ -138,11 +139,4 @@ function clampNumber(value: number, min: number, max: number): number {
     return min;
   }
   return Math.max(min, Math.min(max, value));
-}
-
-function toTitle(value: string): string {
-  return value
-    .replace(/([A-Z])/g, " $1")
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

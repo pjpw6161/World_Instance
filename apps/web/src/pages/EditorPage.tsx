@@ -5,7 +5,9 @@ import { MapViewport } from "../components/MapViewport";
 import { StatsPanel } from "../components/StatsPanel";
 import { AuthStatus } from "../components/AuthStatus";
 import { createEditorEngine, type EditorEngine, type EditorEngineRuntime } from "../editor/engineAdapter";
-import { createInitialRecipe } from "../editor/editorState";
+import { cloneRecipe, createInitialRecipe } from "../editor/editorState";
+import { sampleWorldPresets, type SampleWorldPreset } from "../editor/sampleWorlds";
+import { appName, statusLabel } from "../i18n/korean";
 import {
   createMapProject,
   createWorldInstance,
@@ -29,7 +31,7 @@ export function EditorPage() {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const [engineRuntime, setEngineRuntime] = useState<EditorEngineRuntime>(initialEngineRuntime);
-  const [projectTitle, setProjectTitle] = useState("Untitled World");
+  const [projectTitle, setProjectTitle] = useState("이름 없는 세계");
   const [projectDescription, setProjectDescription] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "ready" | "error">("idle");
   const [savedProject, setSavedProject] = useState<MapProjectPayload | null>(null);
@@ -44,11 +46,24 @@ export function EditorPage() {
     return engineRef.current;
   }, []);
 
+  const applySamplePreset = useCallback((preset: SampleWorldPreset) => {
+    setRecipe(cloneRecipe(preset.recipe));
+    setProjectTitle(preset.title);
+    setProjectDescription(preset.description);
+    setGeneratedRecipe(null);
+    setMapData(null);
+    setSavedProject(null);
+    setSaveStatus("idle");
+    setSaveError(null);
+    setError(null);
+    setStatus("idle");
+  }, []);
+
   const generateMap = useCallback(
     async (nextRecipe: GenerationRecipe, sourceProject?: MapProjectPayload) => {
       const validation = validateGenerationRecipe(nextRecipe);
       if (!validation.ok) {
-        setError(validation.issues[0]?.message ?? "Invalid recipe");
+        setError(validation.issues[0]?.message ?? "세계 설계를 다시 확인해주세요");
         setStatus("invalid");
         return;
       }
@@ -66,7 +81,7 @@ export function EditorPage() {
         setEngineRuntime(engine.runtime());
         setStatus("ready");
       } catch (unknownError) {
-        setError(unknownError instanceof Error ? unknownError.message : "Generation failed");
+        setError(unknownError instanceof Error ? unknownError.message : "세계를 빚지 못했습니다");
         setStatus("error");
       }
     },
@@ -76,12 +91,12 @@ export function EditorPage() {
   const saveMap = useCallback(
     async (visibility: MapVisibility) => {
       if (!mapData) {
-        setSaveError("Generate a map first");
+        setSaveError("먼저 지도를 빚어주세요");
         setSaveStatus("error");
         return;
       }
       if (!generatedRecipe) {
-        setSaveError("Generated recipe is missing");
+        setSaveError("생성 설계가 비어 있습니다");
         setSaveStatus("error");
         return;
       }
@@ -89,7 +104,7 @@ export function EditorPage() {
       setSaveError(null);
       try {
         const created = await createMapProject({
-          title: projectTitle.trim() || `World ${mapData.mapHash.slice(0, 8)}`,
+          title: projectTitle.trim() || `인장 ${mapData.mapHash.slice(0, 8)}의 세계`,
           description: projectDescription.trim(),
           recipe: generatedRecipe,
           stats: mapData.stats,
@@ -100,7 +115,7 @@ export function EditorPage() {
         setSavedProject(finalProject);
         setSaveStatus("ready");
       } catch (unknownError) {
-        setSaveError(unknownError instanceof Error ? unknownError.message : "Could not save map");
+        setSaveError(unknownError instanceof Error ? unknownError.message : "지도를 저장하지 못했습니다");
         setSaveStatus("error");
       }
     },
@@ -109,7 +124,7 @@ export function EditorPage() {
 
   const openWorld = useCallback(async () => {
     if (!savedProject?.currentVersionId) {
-      setSaveError("Save the map first");
+      setSaveError("먼저 지도를 저장해주세요");
       setSaveStatus("error");
       return;
     }
@@ -122,7 +137,7 @@ export function EditorPage() {
       });
       window.location.assign(`/world/${encodeURIComponent(world.worldInstance.id)}`);
     } catch (unknownError) {
-      setSaveError(unknownError instanceof Error ? unknownError.message : "Could not create world");
+      setSaveError(unknownError instanceof Error ? unknownError.message : "월드 인스턴스를 열지 못했습니다");
       setSaveStatus("error");
     }
   }, [savedProject]);
@@ -142,7 +157,7 @@ export function EditorPage() {
     void fetchMapProject(sourceMapId)
       .then((project) => {
         if (!project.currentVersion) {
-          throw new Error("Map has no current version");
+          throw new Error("현재 버전이 없는 지도입니다");
         }
         setProjectTitle(project.title);
         setProjectDescription(project.description);
@@ -150,7 +165,7 @@ export function EditorPage() {
         return generateMap(project.currentVersion.recipe, project);
       })
       .catch((unknownError) => {
-        setError(unknownError instanceof Error ? unknownError.message : "Could not open saved map");
+        setError(unknownError instanceof Error ? unknownError.message : "저장된 지도를 열지 못했습니다");
         setStatus("error");
       });
   }, [generateMap]);
@@ -159,20 +174,29 @@ export function EditorPage() {
     <main className="editor-shell">
       <header className="editor-header">
         <div>
-          <p>World Forge</p>
-          <h1>Editor</h1>
+          <p>{appName}</p>
+          <h1>창조실</h1>
         </div>
         <div className={`engine-runtime ${engineRuntime.kind}`}>
-          <span>Engine</span>
+          <span>엔진</span>
           <strong>{engineRuntime.label}</strong>
           <small>{engineRuntime.detail}</small>
         </div>
-        <nav className="top-nav" aria-label="Navigation">
+        <nav className="top-nav" aria-label="이동">
+          <a className="text-link" href="/portfolio">
+            포트폴리오
+          </a>
           <a className="text-link" href="/dashboard">
-            Dashboard
+            내 세계
+          </a>
+          <a className="text-link" href="/compare">
+            알고리즘 비교실
+          </a>
+          <a className="text-link" href="/determinism">
+            결정성 검증
           </a>
           <a className="text-link" href="/gallery">
-            Gallery
+            탐험관
           </a>
           <AuthStatus />
         </nav>
@@ -182,8 +206,10 @@ export function EditorPage() {
         <ControlPanel
           recipe={recipe}
           isGenerating={status === "generating"}
+          samplePresets={sampleWorldPresets}
           onRecipeChange={setRecipe}
           onGenerate={() => void generateMap(recipe)}
+          onSampleSelect={applySamplePreset}
         />
         <div className="preview-column">
           <MapViewport
@@ -194,30 +220,30 @@ export function EditorPage() {
             onViewModeChange={setViewMode}
           />
           <StatsPanel mapData={mapData} />
-          <section className="project-panel" aria-label="Project actions">
+          <section className="project-panel" aria-label="지도 저장">
             <div className="project-fields">
               <label>
-                <span>Title</span>
+                <span>세계 이름</span>
                 <input type="text" value={projectTitle} maxLength={160} onChange={(event) => setProjectTitle(event.target.value)} />
               </label>
               <label>
-                <span>Description</span>
+                <span>기록 한 줄</span>
                 <input type="text" value={projectDescription} maxLength={2000} onChange={(event) => setProjectDescription(event.target.value)} />
               </label>
             </div>
             <div className="project-actions">
               <button type="button" className="secondary-button" onClick={() => void saveMap("PRIVATE")} disabled={!mapData || saveStatus === "saving"}>
-                Save Private
+                비공개로 보관
               </button>
               <button type="button" className="secondary-button" onClick={() => void saveMap("PUBLIC")} disabled={!mapData || saveStatus === "saving"}>
-                Save Public
+                공개 지도장에 올리기
               </button>
               <button type="button" className="generate-button" onClick={() => void openWorld()} disabled={!savedProject?.currentVersionId || saveStatus === "saving"}>
-                Open World
+                세계로 들어가기
               </button>
             </div>
             <div className="project-status">
-              <span className="status-pill">{saveStatus}</span>
+              <span className="status-pill">{statusLabel(saveStatus)}</span>
               {savedProject ? <code>{savedProject.id}</code> : null}
             </div>
             {saveError ? <p className="error-line">{saveError}</p> : null}

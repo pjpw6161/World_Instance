@@ -1,116 +1,82 @@
-import { useEffect, useRef } from "react";
-import type { MapData, TerrainType } from "@world-forge/shared";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import type { MapData } from "@world-forge/shared";
+import { hitTestWorldMapAnnotation, renderWorldMap, type WorldMapAnnotationHit, type WorldMapViewMode } from "./worldMapRenderer";
+import type { WorldIdentity } from "./worldIdentity";
 import type { WorldEntity } from "./worldState";
 
 interface WorldCanvasProps {
   mapData: MapData;
   entities: readonly WorldEntity[];
   activeLayerId: string;
+  mode: WorldMapViewMode;
+  identity?: WorldIdentity | null;
 }
 
-const terrainColors: Record<TerrainType, string> = {
-  "deep-water": "#1b4876",
-  water: "#3174a8",
-  sand: "#d5be80",
-  grass: "#6b9654",
-  forest: "#32663f",
-  mountain: "#7c796f",
-  road: "#967c52",
-  "cave-floor": "#564c42",
-  "cave-wall": "#2a2522",
-};
+interface WorldMapTooltipState extends WorldMapAnnotationHit {
+  leftPercent: number;
+  topPercent: number;
+}
 
-export function WorldCanvas({ mapData, entities, activeLayerId }: WorldCanvasProps) {
+export function WorldCanvas({ mapData, entities, activeLayerId, mode, identity }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [tooltip, setTooltip] = useState<WorldMapTooltipState | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return;
     }
-    drawWorld(canvas, mapData, entities, activeLayerId);
-  }, [activeLayerId, entities, mapData]);
+    renderWorldMap(canvas, mapData, entities, activeLayerId, mode, identity ?? null);
+  }, [activeLayerId, entities, identity, mapData, mode]);
 
-  return <canvas ref={canvasRef} className="world-canvas pixelated" aria-label="World instance map" />;
-}
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setTooltip(null), 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeLayerId, identity, mapData, mode]);
 
-function drawWorld(canvas: HTMLCanvasElement, mapData: MapData, entities: readonly WorldEntity[], activeLayerId: string): void {
-  canvas.width = mapData.width;
-  canvas.height = mapData.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Canvas 2D context is unavailable");
-  }
-  context.imageSmoothingEnabled = false;
-
-  for (let index = 0; index < mapData.terrainMap.length; index += 1) {
-    const x = index % mapData.width;
-    const y = Math.floor(index / mapData.width);
-    context.fillStyle = terrainColors[mapData.terrainMap[index]];
-    context.fillRect(x, y, 1, 1);
-  }
-
-  for (const portal of mapData.portalList) {
-    if (portal.fromLayerId !== activeLayerId) {
-      continue;
+  const onPointerMove = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || mode !== "styled") {
+      setTooltip(null);
+      return;
     }
-    context.fillStyle = portal.toLayerId === "cave" ? "#b96df2" : "#66c8ff";
-    context.beginPath();
-    context.moveTo(portal.x + 0.5, portal.y - 1.5);
-    context.lineTo(portal.x + 2.5, portal.y + 0.5);
-    context.lineTo(portal.x + 0.5, portal.y + 2.5);
-    context.lineTo(portal.x - 1.5, portal.y + 0.5);
-    context.closePath();
-    context.fill();
-    context.strokeStyle = "#1f2b27";
-    context.lineWidth = 0.45;
-    context.stroke();
-  }
+    const bounds = canvas.getBoundingClientRect();
+    const canvasX = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * canvas.width;
+    const canvasY = ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * canvas.height;
+    const hit = hitTestWorldMapAnnotation(mapData, activeLayerId, identity ?? null, canvasX, canvasY);
+    setTooltip(hit
+      ? {
+          ...hit,
+          leftPercent: (hit.screenX / Math.max(1, canvas.width)) * 100,
+          topPercent: (hit.screenY / Math.max(1, canvas.height)) * 100,
+        }
+      : null);
+  }, [activeLayerId, identity, mapData, mode]);
 
-  for (const object of mapData.objectList) {
-    if (object.layerId !== activeLayerId) {
-      continue;
-    }
-    context.fillStyle = objectColor(object.type);
-    context.beginPath();
-    if (object.type === "cave-entrance") {
-      context.arc(object.x + 0.5, object.y + 0.5, 2.1, 0, Math.PI * 2);
-      context.fill();
-      context.strokeStyle = "#f4d6ff";
-      context.lineWidth = 0.35;
-      context.stroke();
-    } else {
-      context.fillRect(object.x - 1, object.y - 1, 3, 3);
-    }
-  }
+  const label = mode === "debug" ? "디버그 타일 지도" : "살아 있는 세계 지도";
+  const className = mode === "debug" ? "world-canvas debug-world-canvas pixelated" : "world-canvas styled-world-canvas";
+  const tooltipStyle = tooltip
+    ? {
+        left: `${tooltip.leftPercent}%`,
+        top: `${tooltip.topPercent}%`,
+      }
+    : undefined;
 
-  for (const entity of entities) {
-    if (entity.layerId !== activeLayerId) {
-      continue;
-    }
-    context.fillStyle = entity.entityType === "player" ? "#f8f0a8" : "#c44d58";
-    context.beginPath();
-    context.arc(entity.x + 0.5, entity.y + 0.5, entity.entityType === "player" ? 2.4 : 1.8, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = entity.entityType === "player" ? "#26322d" : "#fff4ed";
-    context.lineWidth = 0.45;
-    context.stroke();
-  }
-}
-
-function objectColor(type: string): string {
-  switch (type) {
-    case "tree":
-      return "#163f2a";
-    case "rock":
-      return "#4c514f";
-    case "cave-entrance":
-      return "#7d4aa2";
-    case "village":
-      return "#d9a441";
-    case "road-node":
-      return "#7f6342";
-    default:
-      return "#26322d";
-  }
+  return (
+    <div className="world-canvas-shell">
+      <canvas
+        ref={canvasRef}
+        className={className}
+        aria-label={label}
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => setTooltip(null)}
+      />
+      {tooltip ? (
+        <div className="world-map-tooltip" style={tooltipStyle} role="tooltip">
+          <strong>{tooltip.label}</strong>
+          <span>{tooltip.detail}</span>
+        </div>
+      ) : null}
+    </div>
+  );
 }

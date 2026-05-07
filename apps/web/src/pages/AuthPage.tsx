@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { login, signUp } from "../world/worldApi";
+import { appName } from "../i18n/korean";
 
 interface AuthPageProps {
   mode: "login" | "signup";
@@ -12,7 +13,7 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [status, setStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const isSignup = mode === "signup";
-  const submitLabel = useMemo(() => (isSignup ? "Create Account" : "Sign In"), [isSignup]);
+  const submitLabel = useMemo(() => (isSignup ? "새 기록자 등록" : "기록자 입장"), [isSignup]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -26,7 +27,7 @@ export function AuthPage({ mode }: AuthPageProps) {
       }
       window.location.assign("/editor");
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : "Authentication failed");
+      setError(unknownError instanceof Error ? unknownError.message : "입장에 실패했습니다");
       setStatus("error");
     }
   }
@@ -35,15 +36,15 @@ export function AuthPage({ mode }: AuthPageProps) {
     <main className="editor-shell auth-shell">
       <header className="editor-header">
         <div>
-          <p>World Forge</p>
+          <p>{appName}</p>
           <h1>{submitLabel}</h1>
         </div>
-        <nav className="top-nav" aria-label="Navigation">
+        <nav className="top-nav" aria-label="이동">
           <a className="text-link" href="/editor">
-            Editor
+            창조실
           </a>
           <a className="text-link" href={isSignup ? "/login" : "/signup"}>
-            {isSignup ? "Sign In" : "Create Account"}
+            {isSignup ? "이미 기록자입니다" : "새 기록자 등록"}
           </a>
         </nav>
       </header>
@@ -51,21 +52,21 @@ export function AuthPage({ mode }: AuthPageProps) {
       <section className="auth-panel" aria-label={submitLabel}>
         <form className="auth-form" onSubmit={(event) => void onSubmit(event)}>
           <label>
-            <span>Email</span>
+            <span>이메일</span>
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
           </label>
           {isSignup ? (
             <label>
-              <span>Nickname</span>
+              <span>별명</span>
               <input type="text" value={nickname} onChange={(event) => setNickname(event.target.value)} required maxLength={80} />
             </label>
           ) : null}
           <label>
-            <span>Password</span>
+            <span>비밀번호</span>
             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
           </label>
           <button type="submit" className="generate-button" disabled={status === "submitting"}>
-            {status === "submitting" ? "Submitting" : submitLabel}
+            {status === "submitting" ? "문 열리는 중" : submitLabel}
           </button>
           {error ? <p className="error-line">{error}</p> : null}
         </form>

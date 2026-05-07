@@ -22,10 +22,17 @@ interface EditorEngineOptions {
   onRuntimeChange?: (runtime: EditorEngineRuntime) => void;
 }
 
+const wasmAssetVersion = import.meta.env.VITE_WASM_ASSET_VERSION ?? "2026-04-30-algorithm-visibility";
+
+function versionedWasmAsset(path: string): string {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}v=${encodeURIComponent(wasmAssetVersion)}`;
+}
+
 const wasmRuntime: EditorEngineRuntime = {
   kind: "wasm",
   label: "WASM",
-  detail: "/wasm/world_forge_engine.wasm",
+  detail: versionedWasmAsset("/wasm/world_forge_engine.wasm"),
 };
 
 function fallbackRuntime(reason: string): EditorEngineRuntime {
@@ -38,9 +45,11 @@ function fallbackRuntime(reason: string): EditorEngineRuntime {
 
 export function createEditorEngine(options: EditorEngineOptions = {}): EditorEngine {
   const allowFallback = options.allowFallback ?? import.meta.env.DEV;
+  const moduleUrl = options.wasmModuleUrl ?? versionedWasmAsset("/wasm/world_forge_engine.js");
+  const wasmUrl = options.wasmBinaryUrl ?? versionedWasmAsset("/wasm/world_forge_engine.wasm");
   const wasmEngine = createWorldForgeWasmEngine({
-    moduleUrl: options.wasmModuleUrl ?? "/wasm/world_forge_engine.js",
-    wasmUrl: options.wasmBinaryUrl ?? "/wasm/world_forge_engine.wasm",
+    moduleUrl,
+    wasmUrl,
   });
   const fallbackEngine = createWorldForgeWasmEngine({
     moduleFactory: async () => createDeterministicDevModule(),
@@ -75,7 +84,7 @@ export function createEditorEngine(options: EditorEngineOptions = {}): EditorEng
           detail: loadError,
         });
         throw new Error(
-          `WASM engine failed to load from ${options.wasmModuleUrl ?? "/wasm/world_forge_engine.js"}. Run npm run wasm:build before starting the frontend. ${loadError}`,
+          `WASM engine failed to load from ${moduleUrl}. Run npm run wasm:build before starting the frontend. ${loadError}`,
           { cause: error },
         );
       }
